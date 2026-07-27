@@ -1,6 +1,6 @@
 {
   "name": "smart-annotator",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Bulk-annotate AI output, then let AI revise it all at once.",
   "license": "MIT",
   "type": "module",

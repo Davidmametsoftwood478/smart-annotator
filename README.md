@@ -1,9 +1,14 @@
 # 🖍️ Smart Annotator
-<img width="1362" height="799" alt="image" src="https://github.com/user-attachments/assets/56c448d7-4f65-4f12-9f3f-1bb1239c2a78" />
 
 **Annotate AI output in bulk — then let AI apply every note in one pass.**
 
 中文说明请看 [README.zh-CN.md](README.zh-CN.md)
+
+```
+/plugin marketplace add USERNAME/smart-annotator
+/plugin install smart-annotator@annotator-tools
+```
+*…or just [download the single HTML file](skills/smart-annotator/assets/annotator.html) and double-click it. No install, works offline.*
 
 You rarely accept an AI draft as-is. The usual loop is: spot a problem → prompt → wait → spot the next one → prompt again. Ten problems, ten round trips, and each pass can quietly break something that was already fine.
 
@@ -77,11 +82,15 @@ Interactive HTML runs for real: pages with `<script>` render in an iframe, so yo
 
 ## Install as a plugin
 
-```bash
-git clone https://github.com/USERNAME/smart-annotator.git
+In Claude Code or Claude Cowork:
+
+```
+/plugin marketplace add USERNAME/smart-annotator
+/plugin install smart-annotator@annotator-tools
+/reload-plugins
 ```
 
-Then add it as a plugin from the cloned directory. The built asset is committed, so **no build step is required** to install and use it.
+That's it — the built asset is committed, so **no build step and no clone are required**. Update later with `/plugin marketplace update annotator-tools`.
 
 For the document formats (`.docx` / `.xlsx` / `.pdf` / `.pptx`), the conversion script needs:
 

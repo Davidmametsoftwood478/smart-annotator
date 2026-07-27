@@ -76,11 +76,15 @@ Word / Excel / PDF / PPT 的支持就是这么来的——转换跑在 Claude �
 
 ## 安装为 plugin
 
-```bash
-git clone https://github.com/USERNAME/smart-annotator.git
+在 Claude Code 或 Claude Cowork 里执行：
+
+```
+/plugin marketplace add USERNAME/smart-annotator
+/plugin install smart-annotator@annotator-tools
+/reload-plugins
 ```
 
-然后从克隆目录添加为 plugin。**构建产物已随仓库提交，安装无需构建。**
+就这样——**构建产物已随仓库提交，不用克隆、也不用构建**。以后更新用 `/plugin marketplace update annotator-tools`。
 
 处理 `.docx` / `.xlsx` / `.pdf` / `.pptx` 时，转换脚本需要：
 

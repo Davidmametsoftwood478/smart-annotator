@@ -2,6 +2,11 @@
 
 Notable changes, newest first. Versions are development milestones, not releases.
 
+## 1.0.2
+
+- The repository is now also a **plugin marketplace**: `.claude-plugin/marketplace.json` lets anyone install with `/plugin marketplace add <owner>/smart-annotator` — no clone, no build.
+- Added `displayName` for directory listings.
+
 ## 1.0.1
 
 - Annotation panel starts wider (400 px) with taller comment boxes and larger region thumbnails — less cramped before you touch the resize handle.
