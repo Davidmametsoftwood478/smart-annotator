@@ -4,6 +4,9 @@
 
 中文说明请看 [README.zh-CN.md](README.zh-CN.md)
 
+<img width="1352" height="784" alt="image" src="https://github.com/user-attachments/assets/21a30bcd-c8f2-4799-acde-b6491899059b" />
+
+
 ```
 /plugin marketplace add USERNAME/smart-annotator
 /plugin install smart-annotator@annotator-tools
