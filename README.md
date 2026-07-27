@@ -1,4 +1,5 @@
 # 🖍️ Smart Annotator
+<img width="1362" height="799" alt="image" src="https://github.com/user-attachments/assets/56c448d7-4f65-4f12-9f3f-1bb1239c2a78" />
 
 **Annotate AI output in bulk — then let AI apply every note in one pass.**
 
