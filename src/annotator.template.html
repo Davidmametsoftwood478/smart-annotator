@@ -1,0 +1,1759 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>智能批注器 · AI 产出物批量批注 + 批量修改</title>
+<style>
+  /*__FONTS__*/
+  /* ===== Creative Mode 皮肤：奶油纸 + Archivo Black + 四色 + 黑描边硬阴影 ===== */
+  :root{
+    --bg:#e7dfcc; --panel:#f7f1e3; --panel2:#fffdf5; --ink:#171310; --muted:#6f6656;
+    --line:#171310; --brand:#2f56e6; --brand-weak:#dfe6ff;
+    --green:#2e7d46; --pink:#e857a0; --orange:#e8611f; --yellow:#f2c118;
+    --hl:#ffe98a; --hl-active:#f2c118; --danger:#d1381f; --ok:#2e7d46;
+    --region:#e8611f; --region-weak:rgba(232,97,31,.16);
+    --add:#d9ecd2; --add-ink:#1f7a3d; --del:#f6d9cf; --del-ink:#c0361a;
+    --radius:7px;
+    /* 边框只保留两级：hair=小构件 / bw=容器与分隔；accent 仅用于内容强调线 */
+    --bw-hair:1.5px; --bw:2px; --bw-accent:3px;
+    /* 层级改由阴影深浅表达，而非加粗边框 */
+    --shadow-sm:2px 2px 0 var(--ink); --shadow:4px 4px 0 var(--ink); --shadow-lg:6px 6px 0 var(--ink);
+    --side-w:400px;
+    --font-display:'Archivo Black','PingFang SC','Microsoft YaHei',sans-serif;
+    --font-mono:'Space Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#181510; --panel:#22201a; --panel2:#2b2820; --ink:#f2ead6; --muted:#a49b86;
+      --line:#f2ead6; --brand:#8aa2ff; --brand-weak:#2b3350;
+      --hl:#6a5714; --hl-active:#b89312; --region:#ff8a3d; --region-weak:rgba(255,138,61,.20);
+      --add:#16351f; --add-ink:#6fd48a; --del:#3a1a15; --del-ink:#ff9a86;
+      --shadow:4px 4px 0 var(--ink); --shadow-sm:2px 2px 0 var(--ink);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 var(--font-sans);
+    background-image:radial-gradient(var(--line) .5px,transparent .5px);background-size:22px 22px;background-attachment:fixed}
+  body::before{content:none}
+
+  button{font:inherit;font-weight:700;cursor:pointer;border:var(--bw) solid var(--ink);background:var(--panel2);
+    color:var(--ink);padding:6px 12px;border-radius:var(--radius);box-shadow:var(--shadow-sm);
+    transition:transform .1s,box-shadow .1s,background .12s}
+  button:hover{transform:translate(-1px,-1px);box-shadow:var(--shadow)}
+  button:active{transform:translate(1px,1px);box-shadow:0 0 0 var(--ink)}
+  button.primary{background:var(--brand);color:#fff}
+  button.ghost{background:transparent;border-color:transparent;box-shadow:none;color:var(--muted)}
+  button.ghost:hover{transform:none;box-shadow:none;border-color:transparent;color:var(--ink)}
+  button.on{background:var(--region);color:#fff}
+  #interMode.on{background:var(--brand);color:#fff}
+  button:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;transform:none}
+  input,select,textarea{font:inherit;color:var(--ink);background:var(--panel2);
+    border:var(--bw) solid var(--ink);border-radius:var(--radius);padding:6px 10px}
+  input:focus,select:focus,textarea:focus{outline:none;box-shadow:var(--shadow-sm)}
+  a{color:var(--brand);font-weight:700}
+  .row{display:flex;gap:8px;align-items:center}
+  .grow{flex:1}
+  .pill{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.02em;text-transform:uppercase;
+    padding:2px 9px;border-radius:999px;border:var(--bw-hair) solid var(--ink);background:var(--yellow);color:var(--ink);font-weight:700}
+  .pill.region{background:var(--orange);color:#fff}
+  .pill.sel{background:var(--yellow)}
+  .pill.block{background:var(--pink);color:#fff}
+  .muted{color:var(--muted)}
+
+  header{display:flex;align-items:center;gap:12px;padding:10px 16px;
+    border-bottom:var(--bw) solid var(--ink);background:var(--panel);position:sticky;top:0;z-index:20;flex-wrap:wrap}
+  header h1{font-family:var(--font-display);font-size:17px;margin:0;letter-spacing:-.01em}
+  header .sub{font-family:var(--font-mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+  main{display:grid;grid-template-columns: 1fr var(--side-w);gap:0;height:calc(100vh - 55px)}
+  @media (max-width:900px){ main{grid-template-columns:1fr;height:auto} }
+
+  #left{overflow:auto;padding:18px 22px}
+  #left > .row > strong{font-family:var(--font-display);font-size:14px;letter-spacing:-.01em}
+  #right{border-left:var(--bw) solid var(--ink);background:var(--panel);overflow:auto;
+    display:flex;flex-direction:column;position:relative}
+  /* 拖拽把手：位于批注栏左缘，最宽可拖到屏宽 1/3 */
+  #sideGrip{position:absolute;left:-6px;top:0;bottom:0;width:12px;cursor:col-resize;z-index:30;
+    background:transparent;touch-action:none}
+  #sideGrip::after{content:"";position:absolute;left:4px;top:50%;transform:translateY(-50%);
+    width:4px;height:44px;border-radius:3px;background:var(--ink);opacity:.22;transition:opacity .15s}
+  #sideGrip:hover::after,#sideGrip.dragging::after{opacity:.75}
+  body.resizing{cursor:col-resize;user-select:none}
+  @media (max-width:900px){ #sideGrip{display:none} }
+
+  .loader{border:var(--bw) dashed var(--ink);border-radius:var(--radius);padding:14px;margin-bottom:16px;background:var(--panel2)}
+  .loader strong{font-family:var(--font-display);font-weight:400}
+  .loader textarea{width:100%;min-height:120px;resize:vertical;font-family:var(--font-mono);font-size:12.5px}
+
+  /* 多文档标签栏 */
+  .doc-tabs{display:none;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
+  .doc-tabs.show{display:flex}
+  .doc-tab{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:var(--bw) solid var(--ink);
+    border-radius:var(--radius);background:var(--panel2);cursor:pointer;font-size:12.5px;font-weight:700;
+    box-shadow:var(--shadow-sm);max-width:230px;transition:transform .1s,box-shadow .1s}
+  .doc-tab:hover{transform:translate(-1px,-1px)}
+  .doc-tab.active{background:var(--ink);color:var(--panel)}
+  .doc-tab .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .doc-tab .cnt{font-family:var(--font-mono);font-size:10px;padding:1px 6px;border-radius:999px;
+    background:var(--yellow);color:var(--ink);border:var(--bw-hair) solid var(--ink)}
+  .doc-tab.active .cnt{background:var(--yellow)}
+  .doc-tab .x{opacity:.55;font-weight:700;padding:0 2px}
+  .doc-tab .x:hover{opacity:1;color:var(--danger)}
+  .doc-tab.add{background:transparent;border-style:dashed;box-shadow:none}
+
+  .restore-bar{display:none;align-items:center;gap:10px;margin-bottom:14px;padding:10px 14px;
+    background:var(--yellow);color:var(--ink);border:var(--bw) solid var(--ink);border-radius:var(--radius);box-shadow:var(--shadow-sm)}
+  .restore-bar.show{display:flex}
+  .restore-bar b{font-family:var(--font-display);font-weight:400}
+
+  #docwrap{position:relative}
+  #frame{display:none;width:100%;border:var(--bw) solid var(--ink);border-radius:var(--radius);
+    box-shadow:var(--shadow);background:#fff;min-height:120px}
+  #doc{background:var(--panel2);border:var(--bw) solid var(--ink);border-radius:var(--radius);
+    padding:26px 30px;box-shadow:var(--shadow);position:relative}
+  #doc:empty::before{content:"Load content to start annotating…";color:var(--muted);font-family:var(--font-mono)}
+  html[lang="zh"] #doc:empty::before{content:"载入内容后在此处进行批注…"}
+  #doc [data-block]{position:relative}
+  #doc [data-block]:hover{background:color-mix(in srgb,var(--yellow) 22%,transparent)}
+  .block-btn{position:absolute;left:-32px;top:2px;width:24px;height:24px;line-height:20px;
+    text-align:center;border-radius:6px;padding:0;font-size:12px;opacity:0;box-shadow:none;transition:.12s}
+  #doc [data-block]:hover .block-btn{opacity:1}
+  #doc mark.annot{background:var(--hl);border-bottom:var(--bw-accent) solid var(--hl-active);
+    border-radius:1px;padding:0 1px;cursor:pointer}
+  #doc mark.annot.focus{background:var(--hl-active)}
+  #doc [data-block].block-annot{outline:var(--bw) solid var(--pink);outline-offset:2px;border-radius:3px}
+  #doc table{border-collapse:collapse;margin:10px 0;display:block;overflow:auto}
+  #doc th,#doc td{border:var(--bw-hair) solid var(--ink);padding:6px 10px}
+  #doc th{background:var(--yellow)}
+  /* Excel 式行号/列标栏：只作坐标参照，不可批注 */
+  #doc th.gutter{background:var(--bg);color:var(--muted);font:11px var(--font-mono);
+    text-align:center;min-width:26px;position:sticky;left:0}
+  #doc td[data-cell]:hover,#doc th[data-cell]:hover{outline:var(--bw) solid var(--brand);outline-offset:-2px}
+  #doc pre{background:var(--bg);padding:10px 12px;border-radius:6px;overflow:auto;border:var(--bw-hair) solid var(--ink)}
+  #doc blockquote{border-left:var(--bw-accent) solid var(--pink);margin:10px 0;padding:2px 12px;color:var(--muted)}
+  #doc img{max-width:100%}
+
+  #regionLayer{position:absolute;inset:0;z-index:8;display:none}
+  #regionLayer.active{display:block;cursor:crosshair}
+  .region-rect{position:absolute;border:var(--bw) solid var(--orange);background:var(--region-weak);
+    border-radius:3px;z-index:9;pointer-events:auto;cursor:pointer}
+  .region-rect .badge{position:absolute;top:-12px;left:-12px;background:var(--orange);color:#fff;
+    width:22px;height:22px;border:var(--bw) solid var(--ink);border-radius:5px;font-family:var(--font-display);
+    font-size:11px;line-height:18px;text-align:center}
+  .region-rect.focus{box-shadow:var(--shadow-sm)}
+  #dragBox{position:absolute;border:var(--bw) dashed var(--orange);background:var(--region-weak);display:none;z-index:10}
+
+  #selbar{position:absolute;z-index:50;display:none;background:var(--ink);color:var(--panel);
+    padding:4px;border-radius:6px;box-shadow:var(--shadow-sm);gap:4px;border:var(--bw) solid var(--ink)}
+  #selbar button{background:transparent;border:none;color:var(--panel);padding:4px 8px;box-shadow:none;font-weight:700}
+  #selbar button:hover{background:rgba(255,255,255,.16);transform:none;box-shadow:none}
+
+  .side-head{padding:12px 14px;border-bottom:var(--bw) solid var(--ink);position:sticky;top:0;background:var(--panel);z-index:5}
+  .side-head strong{font-family:var(--font-display);font-weight:400;font-size:14px}
+  .annot-list{padding:12px;display:flex;flex-direction:column;gap:10px;flex:1}
+  .annot-card{border:var(--bw) solid var(--ink);border-radius:var(--radius);padding:10px;background:var(--panel2);box-shadow:var(--shadow-sm)}
+  .annot-card.focus{box-shadow:var(--shadow);transform:translate(-1px,-1px)}
+  .annot-card .q{font-size:12px;color:var(--muted);border-left:var(--bw-accent) solid var(--hl-active);
+    padding-left:8px;margin-bottom:7px;max-height:76px;overflow:auto;white-space:pre-wrap}
+  .annot-card .thumb{width:100%;max-height:150px;object-fit:contain;border:var(--bw) solid var(--ink);
+    border-radius:5px;margin-bottom:6px;background:#fff}
+  .annot-card textarea{width:100%;min-height:76px;resize:vertical;font-size:13px;line-height:1.5}
+  .side-foot{border-top:var(--bw) solid var(--ink);padding:12px;display:flex;flex-direction:column;gap:8px;position:sticky;bottom:0;background:var(--panel)}
+  .empty{color:var(--muted);text-align:center;padding:30px 10px;font-size:13px;font-family:var(--font-mono)}
+
+  dialog{border:var(--bw) solid var(--ink);border-radius:var(--radius);padding:0;background:var(--panel);color:var(--ink);
+    box-shadow:var(--shadow-lg);width:min(560px,94vw)}
+  dialog::backdrop{background:rgba(23,19,16,.45)}
+  .dlg-head{padding:14px 18px;border-bottom:var(--bw) solid var(--ink);display:flex;justify-content:space-between;align-items:center}
+  .dlg-head strong{font-family:var(--font-display);font-weight:400;font-size:15px}
+  .dlg-body{padding:16px 18px;display:flex;flex-direction:column;gap:12px;max-height:70vh;overflow:auto}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{font-family:var(--font-mono);font-size:11px;color:var(--muted);text-transform:uppercase}
+  .field input,.field select{width:100%}
+  .dlg-foot{padding:12px 18px;border-top:var(--bw) solid var(--ink);display:flex;justify-content:flex-end;gap:8px}
+
+  #resultDlg{width:min(1000px,96vw)}
+  .diff-wrap{display:grid;grid-template-columns:1fr 1fr;gap:0;border:var(--bw) solid var(--ink);border-radius:6px;overflow:hidden}
+  .diff-col{overflow:auto;max-height:56vh}
+  .diff-col:first-child{border-right:var(--bw) solid var(--ink)}
+  .diff-col h4{margin:0;padding:8px 12px;position:sticky;top:0;background:var(--panel);border-bottom:var(--bw) solid var(--ink);
+    font-family:var(--font-mono);font-size:11px;text-transform:uppercase}
+  .diff-col pre{margin:0;padding:8px 12px;font:12px/1.5 var(--font-mono);white-space:pre-wrap;word-break:break-word}
+  .diff-line{display:block;padding:0 4px;border-radius:2px}
+  .diff-add{background:var(--add);color:var(--add-ink)}
+  .diff-del{background:var(--del);color:var(--del-ink)}
+  .tabbar{display:flex;gap:6px;margin-bottom:10px}
+  .tabbar button.active{background:var(--brand);color:#fff}
+  .preview-box{border:var(--bw) solid var(--ink);border-radius:6px;padding:18px 20px;max-height:56vh;overflow:auto;background:var(--panel2)}
+  .file-bar{display:none;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+  .hunk-list{max-height:52vh;overflow:auto}
+  .hunk{border:var(--bw) solid var(--ink);border-radius:var(--radius);margin-bottom:10px;overflow:hidden;box-shadow:var(--shadow-sm)}
+  .hunk.off{opacity:.45}
+  .hunk-head{display:flex;align-items:center;gap:8px;padding:5px 10px;background:var(--panel);
+    border-bottom:var(--bw) solid var(--ink);font-family:var(--font-mono);font-size:11px}
+  .hunk-head .tag{background:var(--pink);color:#fff;border:var(--bw-hair) solid var(--ink);border-radius:999px;padding:0 6px;font-size:10px}
+  .hunk-head .sw{display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-weight:700}
+  .hunk pre{margin:0;padding:6px 10px;font:12px/1.5 var(--font-mono);white-space:pre-wrap;word-break:break-word}
+  .hunk pre.d{background:var(--del);color:var(--del-ink)}
+  .hunk pre.i{background:var(--add);color:var(--add-ink)}
+  .omit-sw{display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;font-weight:700}
+  .receipt-sum{font-family:var(--font-display);font-size:14px}
+  .receipt-list{max-height:44vh;overflow:auto;display:flex;flex-direction:column;gap:8px}
+  .receipt-row{display:flex;gap:10px;align-items:flex-start;border:var(--bw) solid var(--ink);border-radius:var(--radius);
+    padding:8px 10px;background:var(--panel2)}
+  .receipt-row.warn{background:var(--del)}
+  .receipt-row.ok .rst{color:var(--ok)}
+  .receipt-row.warn .rst{color:var(--del-ink)}
+  .receipt-row .rst{font-weight:800;font-size:15px}
+  .receipt-row .rhead{font-family:var(--font-mono);font-size:11px}
+  .receipt-row .rq{font-size:13px;margin-top:2px}
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--panel);
+    padding:8px 16px;border-radius:999px;border:var(--bw) solid var(--ink);box-shadow:var(--shadow-sm);z-index:100;
+    opacity:0;transition:.2s;pointer-events:none;font-weight:700}
+  .toast.show{opacity:1}
+  .kbd{font:11px var(--font-mono);background:var(--panel2);border:var(--bw-hair) solid var(--ink);border-radius:4px;padding:1px 5px}
+  code{background:var(--bg);padding:1px 5px;border-radius:4px;font-size:12.5px;font-family:var(--font-mono)}
+</style>
+</head>
+<body>
+<header>
+  <h1 data-i18n="appTitle">🖍️ Smart Annotator</h1>
+  <span class="sub" data-i18n="tagline">Annotate in bulk → let AI revise it all at once</span>
+  <span class="grow"></span>
+  <select id="fmt" data-i18n-title="fmtTitle">
+    <option value="html">HTML</option>
+    <option value="markdown">Markdown</option>
+    <option value="csv" data-i18n="fmtCsv">CSV / Table</option>
+    <option value="text" data-i18n="fmtText">Plain text</option>
+  </select>
+  <button id="interMode" data-i18n="interMode" data-i18n-title="interModeTitle">⚡ Interactive</button>
+  <button id="regionMode" data-i18n="regionMode" data-i18n-title="regionModeTitle">▭ Region</button>
+  <button id="sampleBtn" data-i18n="sample">Load sample</button>
+  <button id="settingsBtn" data-i18n="settings">⚙️ AI settings</button>
+  <button id="langBtn" data-i18n-title="langTitle">中文</button>
+</header>
+
+<main>
+  <section id="left">
+    <div class="loader" id="loader">
+      <div class="row" style="margin-bottom:8px">
+        <strong data-i18n="step1">1) Load AI output</strong>
+        <span class="muted" data-i18n="step1Hint">Paste or open files, then hit “Render &amp; annotate” · MD·HTML·CSV·text·images open here / Word·Excel·PDF·PPT via Claude</span>
+        <span class="grow"></span>
+        <input type="file" id="file" multiple accept=".html,.htm,.md,.markdown,.txt,.csv,.png,.jpg,.jpeg,.gif,.webp,.svg,.docx,.xlsx,.xls,.pptx,.pdf" style="max-width:180px" />
+      </div>
+      <textarea id="src" data-i18n-ph="srcPlaceholder" placeholder="Paste HTML / Markdown / plain text here…"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="primary" id="renderBtn" data-i18n="render">Render &amp; annotate</button>
+        <button id="editBtn" style="display:none" data-i18n="editSrc">↩︎ Reload / edit source</button>
+        <button id="loadPack" data-i18n="loadPack" data-i18n-title="loadPackTitle">↺ Load pack</button>
+        <input type="file" id="packFile" accept=".json,application/json" style="display:none" />
+        <span class="grow"></span>
+        <span class="muted" id="mode-hint"></span>
+      </div>
+    </div>
+
+    <div id="restoreBar" class="restore-bar">
+      <span id="restoreMsg"></span>
+      <span class="grow"></span>
+      <button class="primary" id="restoreYes" data-i18n="restore">Restore</button>
+      <button id="restoreNo" data-i18n="dismiss">Dismiss</button>
+    </div>
+
+    <div style="margin-bottom:8px" class="row">
+      <strong data-i18n="step2">2) Annotate</strong>
+      <span class="muted" id="annot-hint"></span>
+    </div>
+
+    <!-- 多文档标签栏：每个文件一个标签，各自独立累积批注 -->
+    <div id="docTabs" class="doc-tabs"></div>
+
+    <div id="docwrap">
+      <div id="doc"></div>
+      <iframe id="frame" data-i18n-title="framePreview" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"></iframe>
+      <div id="regionLayer"><div id="dragBox"></div></div>
+    </div>
+    <div id="selbar">
+      <button id="selAnnot" data-i18n="annotateSel">🖍️ Annotate</button>
+    </div>
+  </section>
+
+  <aside id="right">
+    <div id="sideGrip" data-i18n-title="gripTitle" title="Drag to resize · double-click to reset"></div>
+    <div class="side-head">
+      <div class="row">
+        <strong data-i18n="annotations">Annotations</strong>
+        <span class="pill" id="count">0</span>
+        <span class="grow"></span>
+        <button class="ghost" id="clearAll" data-i18n="clear" data-i18n-title="clearTitle">Clear</button>
+      </div>
+      <div class="muted" id="scopeHint" style="font-size:11px;font-family:var(--font-mono);margin-top:4px"></div>
+    </div>
+    <div class="annot-list" id="list"></div>
+    <div class="side-foot">
+      <button class="primary" id="exportOrder" data-i18n-title="exportOrderTitle"><span data-i18n="exportOrder">⬇︎ Export brief → drag to Claude</span></button>
+      <div class="row">
+        <button class="grow" id="runAI" data-i18n-title="runAITitle"><span data-i18n="runAI">✨ Let AI revise</span> (<span id="cnt2">0</span>)</button>
+        <button id="exportPack" data-i18n-title="exportPackTitle">⬇︎ JSON</button>
+        <button class="ghost" id="exportPrompt" data-i18n-title="copyPromptTitle">📋</button>
+      </div>
+      <label class="omit-sw" id="uiShotWrap" style="display:none"><input type="checkbox" id="uiShot" /> <span data-i18n="uiShot">UI screenshot → revise the code behind it</span></label>
+      <label class="omit-sw"><input type="checkbox" id="omitSrc" /> <span data-i18n="omitSource">Send notes only (no source)</span></label>
+      <span class="muted" id="omitHint" style="font-size:11px"></span>
+      <span class="muted" id="foot-hint" style="font-size:12px" data-i18n="footHint">In Claude: click “Export brief”, then drag the file back into the chat — Claude revises and returns it.</span>
+      <span class="muted" id="saveHint" style="font-size:11px;font-family:var(--font-mono)"></span>
+      <span class="muted" id="ai-status" style="font-size:12px"></span>
+    </div>
+  </aside>
+</main>
+
+<dialog id="settingsDlg">
+  <div class="dlg-head"><strong data-i18n="settingsTitle">AI settings</strong><button class="ghost" onclick="settingsDlg.close()">✕</button></div>
+  <div class="dlg-body">
+    <p class="muted" style="margin:0" data-i18n="settingsNote">Your key stays in browser memory only (never written to disk, cleared on refresh) and is used solely for requests you trigger. If the browser blocks CORS, point Base URL at your own proxy. Region screenshots are sent along to multimodal models.</p>
+    <div class="field">
+      <label data-i18n="provider">Provider</label>
+      <select id="provider">
+        <option value="anthropic" data-i18n="providerAnthropic">Anthropic (Claude, vision)</option>
+        <option value="openai" data-i18n="providerOpenAI">OpenAI-compatible (DeepSeek, local, …)</option>
+      </select>
+    </div>
+    <div class="field"><label>Base URL</label><input id="baseUrl" /></div>
+    <div class="field"><label>API Key</label><input id="apiKey" type="password" placeholder="sk-..." /></div>
+    <div class="field"><label data-i18n="model">Model</label><input id="model" placeholder="model id" /></div>
+    <div class="row">
+      <div class="field grow"><label>max tokens</label><input id="maxTokens" type="number" value="4096" /></div>
+      <div class="field grow"><label>temperature</label><input id="temp" type="number" step="0.1" value="0.3" /></div>
+    </div>
+    <p class="muted" style="margin:0;font-size:12px" data-i18n-html="settingsCors">Direct Anthropic calls need the <code>anthropic-dangerous-direct-browser-access</code> header — already included.</p>
+  </div>
+  <div class="dlg-foot">
+    <button onclick="settingsDlg.close()" data-i18n="close">Close</button>
+    <button class="primary" id="saveSettings" data-i18n="save">Save</button>
+  </div>
+</dialog>
+
+<dialog id="resultDlg">
+  <div class="dlg-head">
+    <strong data-i18n="resultTitle">AI result · review before applying</strong>
+    <button class="ghost" onclick="resultDlg.close()">✕</button>
+  </div>
+  <div class="dlg-body">
+    <div id="fileBar" class="file-bar"></div>
+    <div class="tabbar">
+      <button data-tab="changes" class="active" data-i18n="tabChanges">Changes</button>
+      <button data-tab="receipt" data-i18n="tabReceipt">Receipt</button>
+      <button data-tab="preview" data-i18n="tabPreview">Preview</button>
+      <button data-tab="raw" data-i18n="tabRaw">New source</button>
+    </div>
+    <div id="tab-changes">
+      <div class="row" style="margin-bottom:8px">
+        <span class="muted" style="font-size:12px" data-i18n="changesHint">Untick any change you don’t want — only ticked ones are applied.</span>
+        <span class="grow"></span>
+        <button id="acceptAll" data-i18n="acceptAll">Accept all</button>
+        <button id="rejectAll" data-i18n="rejectAll">Reject all</button>
+      </div>
+      <div id="hunkList" class="hunk-list"></div>
+    </div>
+    <div id="tab-receipt" style="display:none">
+      <div id="receiptSummary" class="receipt-sum"></div>
+      <p class="muted" style="font-size:11.5px;margin:6px 0" data-i18n="receiptNote">Heuristic check: it compares whether the quoted text still appears unchanged. A note asking to *add* something nearby may show as “no change detected” even though it was applied — verify those yourself.</p>
+      <div id="receiptList" class="receipt-list"></div>
+      <button id="resubmitBtn" class="primary" style="margin-top:10px;display:none" data-i18n="resubmit">↻ Re-submit the undetected notes</button>
+    </div>
+    <div id="tab-preview" style="display:none"><div class="preview-box" id="previewBox"></div></div>
+    <div id="tab-raw" style="display:none"><textarea id="rawBox" style="width:100%;min-height:52vh;font-family:ui-monospace,monospace;font-size:12.5px"></textarea></div>
+  </div>
+  <div class="dlg-foot">
+    <button onclick="resultDlg.close()" data-i18n="discard">Discard</button>
+    <button id="copyResult" data-i18n="copyNew">Copy new</button>
+    <button class="primary" id="acceptResult">Apply</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<!--__LIBS__-->
+
+<script>
+/* =====================================================================
+ * 智能批注器 —— 单文件 / 无后端 / 可离线
+ * 四层：① 渲染 ② 批注(划词/整段/圈选) ③ 组装 prompt ④ 应用(AI/diff)
+ * 本版新增：marked 稳健 MD 解析 + 圈选批注(html2canvas 截图, 多模态可看图)
+ * ===================================================================== */
+// 由 skill 注入脚本替换；独立打开时为 null
+const PRELOAD = /*__PRELOAD__*/ null;
+
+/* =====================================================================
+ * i18n —— 默认英文；可切中文。UI 语言同时决定发给 AI 的指令语言。
+ * ===================================================================== */
+const I18N = {
+ en:{
+  appTitle:'🖍️ Smart Annotator', tagline:'Annotate in bulk → let AI revise it all at once',
+  fmtTitle:'Content format', fmtCsv:'CSV / Table', fmtText:'Plain text',
+  interMode:'⚡ Interactive', interModeTitle:'Interactive mode: render in an iframe so page scripts run and you can click through; annotate with Region',
+  regionMode:'▭ Region', regionModeTitle:'Drag a box over any visual area (chart / card / image / SVG) to annotate it',
+  sample:'Load sample', settings:'⚙️ AI settings', langTitle:'切换到中文',
+  step1:'1) Load AI output',
+  step1Hint:'Paste or open files, then hit “Render & annotate” · MD·HTML·CSV·text·images open here / Word·Excel·PDF·PPT via Claude',
+  srcPlaceholder:'Paste HTML / Markdown / plain text here…',
+  render:'Render & annotate', editSrc:'↩︎ Reload / edit source',
+  loadPack:'↺ Load pack', loadPackTitle:'Load a previously exported annotation pack (JSON) to keep annotating or review',
+  restore:'Restore', dismiss:'Dismiss',
+  step2:'2) Annotate',
+  hintStatic:'Select text to annotate · hover a block and click <span class="kbd">💬</span> for the whole block · click <span class="kbd">▭ Region</span> then drag a box over a visual area',
+  hintInteractive:'Interactive mode: page scripts run — click through to the state you want, then <span class="kbd">▭ Region</span> to annotate that area (switch back to document mode for text/block annotations)',
+  framePreview:'Interactive preview', annotateSel:'🖍️ Annotate',
+  annotations:'Annotations', clear:'Clear', clearTitle:'Clear all annotations on this document',
+  emptyList:'No annotations yet.<br>Select text, hover a block, or drag a region to add your first.',
+  exportOrder:'⬇︎ Export brief → drag to Claude',
+  exportOrderTitle:'Export “source + all annotations” as one file; drag it back into Claude to revise everything at once',
+  runAI:'✨ Let AI revise', runAITitle:'Works once an API key is set in AI settings',
+  exportPackTitle:'Export annotation pack JSON (includes region screenshots, for programmatic use)',
+  copyPromptTitle:'Copy as text instead',
+  footHint:'In Claude: click “Export brief”, then drag the file back into the chat — Claude revises and returns it.',
+  settingsTitle:'AI settings',
+  settingsNote:'Your key stays in browser memory only (never written to disk, cleared on refresh) and is used solely for requests you trigger. If the browser blocks CORS, point Base URL at your own proxy. Region screenshots are sent along to multimodal models.',
+  provider:'Provider', providerAnthropic:'Anthropic (Claude, vision)', providerOpenAI:'OpenAI-compatible (DeepSeek, local, …)',
+  model:'Model', settingsCors:'Direct Anthropic calls need the <code>anthropic-dangerous-direct-browser-access</code> header — already included.',
+  close:'Close', save:'Save',
+  gripTitle:'Drag to resize the panel (max 1/3 of the window) · double-click to reset',
+  uiShot:'UI screenshot → revise the code behind it',
+  omitSource:'Send notes only (no source)',
+  omitAuto:n=>`auto-on: source is ${n}KB — the AI already has this file`,
+  omitOn:'Only the notes will be exported — make sure the AI has the file.',
+  resultTitle:'AI result · review before applying',
+  tabChanges:'Changes', tabReceipt:'Receipt',
+  changesHint:'Untick any change you don\u2019t want — only ticked ones are applied.',
+  acceptAll:'Accept all', rejectAll:'Reject all', acceptThis:'accept',
+  noChanges:'No textual changes detected.', noNotes:'No notes on this document.',
+  receiptSummary:(a,b)=>`${a} of ${b} notes show a change`,
+  receiptWarn:n=>`· ${n} not detected`,
+  receiptNote:'Heuristic check: it compares whether the quoted text still appears unchanged. A note asking to *add* something nearby may show as \u201cno change detected\u201d even though it was applied — verify those yourself.',
+  stChanged:'change detected', stNoChange:'no change detected', stUnknown:'cannot verify',
+  noComment:'(no note written)',
+  resubmit:'\u21bb Re-submit the undetected notes',
+  applySelected:(a,b)=> b? `\u2713 Apply ${a}/${b} changes` : '\u2713 Apply',
+  tApplied:n=>`Applied to ${n} document(s)`,
+  tResubmit:n=>`Follow-up for ${n} note(s) copied & downloaded — send it to the AI`,
+  tabPreview:'Preview (new)', tabRaw:'New source', discard:'Discard', copyNew:'Copy new',
+  // 动态
+  kindSel:'Text', kindBlock:'Block', kindRegion:'Region',
+  del:'Delete', commentPh:'Your revision note, e.g. “too long, cut to one line” / “weak color contrast”',
+  addFiles:'＋ Add files', closeTab:'Close this document', untitled:'Untitled',
+  scopeOne:d=>`Annotating: ${d}`, scopeMulti:(d,n,m)=>`Annotating: ${d} · ${n} of ${m} docs annotated`,
+  tRendered:'Rendered — start annotating',
+  tInteractive:'Interactive mode: click through the page, then use ▭ Region',
+  tNeedContent:'Paste or open something first', tSelectInDoc:'Please select inside the document',
+  tCapturing:'Capturing region…', tSampleLoaded:'Sample has cards and a chart · try ▭ Region on a card',
+  tImgLoaded:'Image loaded — render, then use Region', tFileRead:'File loaded — click Render',
+  tCopied:'Copied to clipboard', tOrderExported:'Brief exported — drag that file into Claude',
+  tPackExported:'Annotation pack exported (with screenshots)', tAccepted:'Accepted — source replaced',
+  tSettingsSaved:'Settings saved (in memory only)', tRestored:n=>`Restored ${n} annotation(s)`,
+  tPackLoaded:n=>`Pack loaded (${n} annotations)`, tEditSrc:'Edit the source, then render again (annotations will be re-placed where possible)',
+  tModeInter:'Switched to interactive mode (scripts run, clickable)', tModeStatic:'Switched to document mode (text/block annotations)',
+  tDocAdded:n=>`${n} document(s) added`, tDocClosed:'Document closed',
+  cfgClearAll:'Clear all annotations on this document?', cfgSwitchMode:'Switching render mode clears annotations on this document. Continue?',
+  cfgCloseTab:n=>`Close “${n}”? Its annotations will be discarded.`,
+  savedAt:t=>`✓ Auto-saved ${t}`, savedNoThumb:' (screenshots not stored — export the pack to keep them)',
+  saveUnavailable:'⚠ Local autosave unavailable (sandbox/private mode) · export the pack regularly',
+  restoreMsg:(n,t)=>`Found <b>${n}</b> unfinished annotation(s) · ${t}`, restoreNoThumb:' (region screenshots not stored)',
+  binTitle:e=>`${e} files open via Claude`,
+  binBody:(n,e)=>`<p>“${n}” is a ${e} file. To stay lightweight and offline, this standalone page does <b>not</b> bundle Word/Excel/PPT/PDF parsers.</p>
+    <p>Send the file in a <b>Claude chat</b> and say “<b>annotate this file</b>” — Claude converts it into an annotatable view (docx→rich text, xlsx→table, pdf/pptx→page images), and after you annotate it rewrites <b>the original file, preserving its format</b>.</p>
+    <p class="muted">(Markdown / HTML / CSV / plain text / images open directly here.)</p>`,
+  tBinNotice:e=>`${e} needs conversion by Claude`,
+  aiWorking:'Calling AI…', aiFailed:(m)=>`AI call failed:\n${m}\n\nSwitch to “copy prompt + paste the AI reply back”?`,
+  pastePrompt:'Prompt copied. Run it in any AI, then paste the full revised text back here:',
+  packFailed:m=>'Failed to load pack: '+m, packInvalid:'not a valid pack (missing annotations)', packNoSource:'pack has no source text'
+ },
+ zh:{
+  appTitle:'🖍️ 智能批注器', tagline:'批量批注 → 一次性交给 AI 批量修改',
+  fmtTitle:'内容格式', fmtCsv:'CSV / 表格', fmtText:'纯文本',
+  interMode:'⚡ 交互模式', interModeTitle:'交互模式：用 iframe 运行页面脚本，可点击交互；用圈选批注',
+  regionMode:'▭ 圈选批注', regionModeTitle:'圈选任意视觉区域进行批注（图表/卡片/图片/SVG）',
+  sample:'载入示例', settings:'⚙️ AI 设置', langTitle:'Switch to English',
+  step1:'1) 载入 AI 产出内容',
+  step1Hint:'粘贴 / 打开文件，再点「渲染并开始批注」　·　支持 MD·HTML·CSV·文本·图片（本页直接）／ Word·Excel·PDF·PPT（经 Claude 转换）',
+  srcPlaceholder:'在此粘贴 HTML / Markdown / 纯文本…',
+  render:'渲染并开始批注', editSrc:'↩︎ 重新载入 / 编辑原文',
+  loadPack:'↺ 载入批注包', loadPackTitle:'载入之前导出的批注包 JSON，继续批注或复盘',
+  restore:'恢复', dismiss:'忽略',
+  step2:'2) 批注',
+  hintStatic:'选中文字批注；悬停段落点 <span class="kbd">💬</span> 整段批注；点 <span class="kbd">▭ 圈选</span> 后拖框批注视觉区域',
+  hintInteractive:'交互模式：页面脚本已运行、可点击操作到目标状态；点 <span class="kbd">▭ 圈选</span> 拖框批注该区域（划词/整段请切回文档模式）',
+  framePreview:'交互预览', annotateSel:'🖍️ 批注这段',
+  annotations:'批注清单', clear:'清空', clearTitle:'清空本文档的全部批注',
+  emptyList:'还没有批注。<br>选中文字 / 悬停段落 / 圈选视觉区域，添加第一条。',
+  exportOrder:'⬇︎ 导出批注单 → 拖给 Claude',
+  exportOrderTitle:'把「原文 + 全部批注」导出为一个文件，拖回 Claude 对话即可批量修改',
+  runAI:'✨ 直接让 AI 改', runAITitle:'已在设置里填 API Key 时，直接出修改结果',
+  exportPackTitle:'导出批注包 JSON（含圈选截图，供程序化处理）',
+  copyPromptTitle:'仍想手动复制文本',
+  footHint:'在 Claude 里：点「导出批注单」下载文件，把文件拖回对话发送，AI 据此改好并回传。',
+  settingsTitle:'AI 设置',
+  settingsNote:'Key 只存在浏览器内存中（不写入磁盘、刷新即清空），仅用于你手动发起的请求。若浏览器 CORS 拦截，可把 Base URL 指向你自己的代理。圈选批注的截图会作为图片一并发给多模态模型。',
+  provider:'服务商', providerAnthropic:'Anthropic（Claude，支持看图）', providerOpenAI:'OpenAI 兼容（含 DeepSeek/本地等）',
+  model:'模型', settingsCors:'Anthropic 直连需浏览器头 <code>anthropic-dangerous-direct-browser-access</code>，本工具已自动附带。',
+  close:'关闭', save:'保存',
+  gripTitle:'拖拽调整批注栏宽度（最宽为窗口 1/3）· 双击复位',
+  uiShot:'这是界面截图 → 改它背后的代码',
+  omitSource:'只发批注（不含原文）',
+  omitAuto:n=>`已自动开启：原文 ${n}KB，AI 手上已有这份文件`,
+  omitOn:'导出时只含批注——请确认 AI 已持有该文件。',
+  resultTitle:'AI 修改结果 · 确认后应用',
+  tabChanges:'改动', tabReceipt:'回执',
+  changesHint:'取消勾选你不想要的改动——只有勾选的会被应用。',
+  acceptAll:'全选', rejectAll:'全不选', acceptThis:'采纳',
+  noChanges:'未检测到文本改动。', noNotes:'该文档没有批注。',
+  receiptSummary:(a,b)=>`${b} 条批注中，${a} 条检出改动`,
+  receiptWarn:n=>`· ${n} 条未检出`,
+  receiptNote:'这是本地启发式核验：比对引用原文是否还原样存在。若批注是「在这句后面补个数据」这类不改动原句的要求，可能显示「未检出改动」但其实已执行——这几条请自行确认。',
+  stChanged:'已检出改动', stNoChange:'未检出改动', stUnknown:'无法判定',
+  noComment:'（未填写意见）',
+  resubmit:'\u21bb 把未检出的批注重新提交一次',
+  applySelected:(a,b)=> b? `\u2713 应用 ${a}/${b} 处改动` : '\u2713 应用',
+  tApplied:n=>`已应用到 ${n} 篇文档`,
+  tResubmit:n=>`已复制并下载 ${n} 条待处理批注的追加请求，发给 AI 即可`,
+  tabPreview:'渲染预览（新版）', tabRaw:'新版源码', discard:'放弃', copyNew:'复制新版',
+  kindSel:'划词', kindBlock:'整段', kindRegion:'圈选',
+  del:'删除', commentPh:'写下修改意见，例如：这里太长，压缩成一句话／颜色对比太弱',
+  addFiles:'＋ 添加文件', closeTab:'关闭该文档', untitled:'未命名',
+  scopeOne:d=>`当前批注：${d}`, scopeMulti:(d,n,m)=>`当前批注：${d} · 共 ${m} 篇，${n} 篇已有批注`,
+  tRendered:'已渲染，可以开始批注了',
+  tInteractive:'交互模式：页面可点击操作；点「▭ 圈选批注」拖框批注',
+  tNeedContent:'请先粘贴或打开内容', tSelectInDoc:'请在正文中选择',
+  tCapturing:'正在截取区域…', tSampleLoaded:'示例含数据卡片与图表 · 点「▭ 圈选批注」框住卡片试试',
+  tImgLoaded:'已载入图片，点「渲染」后用圈选批注', tFileRead:'已读取文件，点「渲染」开始',
+  tCopied:'已复制到剪贴板', tOrderExported:'已导出批注单，把该文件拖回 Claude 对话发送即可',
+  tPackExported:'已导出批注包 JSON（含圈选截图）', tAccepted:'已采纳新版并替换原文',
+  tSettingsSaved:'设置已保存（仅存内存）', tRestored:n=>`已恢复 ${n} 条批注`,
+  tPackLoaded:n=>`已载入批注包（${n} 条批注）`, tEditSrc:'可编辑原文后重新渲染（已有批注会尽量重新定位）',
+  tModeInter:'已切到交互模式（脚本运行、可点击）', tModeStatic:'已切到文档模式（可划词/整段批注）',
+  tDocAdded:n=>`已添加 ${n} 篇文档`, tDocClosed:'已关闭该文档',
+  cfgClearAll:'清空本文档的全部批注？', cfgSwitchMode:'切换渲染模式会清空本文档的批注，继续？',
+  cfgCloseTab:n=>`关闭「${n}」？其批注将被丢弃。`,
+  savedAt:t=>`✓ 已自动保存 ${t}`, savedNoThumb:'（截图未存，导出批注包可保留）',
+  saveUnavailable:'⚠ 本地保存不可用（沙箱/隐私模式）· 请及时导出批注包',
+  restoreMsg:(n,t)=>`发现上次未完成的批注 <b>${n}</b> 条 · ${t}`, restoreNoThumb:'（圈选截图未保存）',
+  binTitle:e=>`${e} 文件需经 Claude 打开`,
+  binBody:(n,e)=>`<p>《${n}》是 ${e} 格式。独立网页为保持轻量离线，<b>不内置</b> Word/Excel/PPT/PDF 解析。</p>
+    <p>请在 <b>Claude 对话</b> 里把这个文件发给我并说「<b>批注这个文件</b>」——我会自动把它转成可批注视图（docx→图文、xlsx→表格、pdf/pptx→逐页图片）再打开，批注后由 Claude 改写<b>原文件并保留格式</b>。</p>
+    <p class="muted">（Markdown / HTML / CSV / 纯文本 / 图片 可在本页直接打开。）</p>`,
+  tBinNotice:e=>`${e} 需经 Claude 转换后批注`,
+  aiWorking:'正在请求 AI…', aiFailed:(m)=>`调用 AI 失败：\n${m}\n\n是否改为「复制 Prompt + 手动粘贴 AI 回复」？`,
+  pastePrompt:'已复制 Prompt。到任意 AI 里粘贴运行，再把「修改后的全文」粘回这里：',
+  packFailed:m=>'载入批注包失败：'+m, packInvalid:'不是有效的批注包（缺 annotations）', packNoSource:'批注包里没有原文'
+ }
+};
+let RESULT={files:[],idx:0};
+let LANG = 'en';
+function t(k, ...a){ const v=(I18N[LANG]||I18N.en)[k]; return typeof v==='function' ? v(...a) : (v===undefined? k : v); }
+function applyI18n(){
+  document.documentElement.lang = LANG;
+  document.querySelectorAll('[data-i18n]').forEach(el=>{ el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-html]').forEach(el=>{ el.innerHTML = t(el.dataset.i18nHtml); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el=>{ el.title = t(el.dataset.i18nTitle); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=>{ el.placeholder = t(el.dataset.i18nPh); });
+  const lb=$('#langBtn'); if(lb) lb.textContent = LANG==='en' ? '中文' : 'EN';
+  updateAnnotHint(state.mode);
+  renderList(); renderTabs(); refreshOmit(); refreshUiShot();
+  if(RESULT && RESULT.files && RESULT.files.length) renderResult();
+}
+function setLang(l){ LANG=l; try{ localStorage.setItem('smart-annotator:lang', l); }catch(e){} applyI18n(); }
+const state = {
+  format:'html', originalSource:'', rendered:false,
+  originalFile:null,                    // 由 skill 注入：{name,note}——视图由某二进制文件转换而来，改写应回写该文件
+  docs:[], activeId:null, docSeq:1, omitSource:'auto',     // 多文档：每篇独立累积批注
+  mode:'static', userSetMode:false,     // static=innerHTML(可批注文字/段落) | interactive=iframe(脚本运行、可点击，圈选批注)
+  annotations:[], seq:1, regionOn:false,
+  settings:{ provider:'anthropic', baseUrl:'https://api.anthropic.com', apiKey:'',
+    model:'claude-sonnet-4-5', maxTokens:4096, temp:0.3 }
+};
+const $ = s => document.querySelector(s);
+const doc = $('#doc');
+const frame = $('#frame');
+const listEl = $('#list');
+const toast = (m)=>{const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),1900);};
+const esc = s => (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------- ① 渲染 ---------- */
+// marked 缺失时的极简兜底
+function miniMarkdown(md){
+  return md.replace(/\r\n?/g,'\n').split(/\n{2,}/).map(b=>{
+    const h=b.match(/^(#{1,6})\s+(.*)/); if(h) return `<h${h[1].length}>${esc(h[2])}</h${h[1].length}>`;
+    return '<p>'+esc(b).replace(/\n/g,'<br>')+'</p>';
+  }).join('');
+}
+function mdToHtml(src){
+  if(window.marked){ try{ return window.marked.parse(src,{gfm:true,breaks:true}); }catch(e){ console.warn(e); } }
+  return miniMarkdown(src);
+}
+// 轻量 CSV 解析（支持引号包裹、转义双引号、字段内换行）
+function parseCSV(text){
+  const rows=[]; let row=[], cur='', q=false;
+  const s=text.replace(/\r\n?/g,'\n');
+  for(let i=0;i<s.length;i++){ const c=s[i];
+    if(q){ if(c==='"'){ if(s[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else { if(c==='"') q=true;
+      else if(c===','){ row.push(cur); cur=''; }
+      else if(c==='\n'){ row.push(cur); rows.push(row); row=[]; cur=''; }
+      else cur+=c; }
+  }
+  if(cur!==''||row.length){ row.push(cur); rows.push(row); }
+  return rows.filter(r=>r.length && !(r.length===1 && r[0]===''));
+}
+const colLetter=n=>{ let s=''; while(n>0){ const r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=(n-r-1)/26; } return s; };
+// CSV 同样输出 A1 式单元格锚点 + 行号/列标栏，批注即可携带精确坐标
+function csvToTable(src){
+  const rows=parseCSV(src); if(!rows.length) return '<p class="muted">空表</p>';
+  const nCols=Math.max(...rows.map(r=>r.length));
+  const head='<tr><th class="gutter"></th>'+Array.from({length:nCols},(_,i)=>`<th class="gutter">${colLetter(i+1)}</th>`).join('')+'</tr>';
+  const body=rows.map((r,ri)=>'<tr><th class="gutter">'+(ri+1)+'</th>'+
+    Array.from({length:nCols},(_,ci)=>{ const ref=colLetter(ci+1)+(ri+1); const tag=ri===0?'th':'td';
+      return `<${tag} data-cell="${ref}">${esc(r[ci]??'')}</${tag}>`; }).join('')+'</tr>').join('');
+  return `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+function toHtml(src){
+  if(state.format==='html') return src;
+  if(state.format==='markdown') return mdToHtml(src);
+  if(state.format==='csv') return csvToTable(src);
+  return src.split(/\n{2,}/).map(p=>'<p>'+esc(p).replace(/\n/g,'<br>')+'</p>').join('');
+}
+function stageEl(){ return state.mode==='interactive' ? frame : doc; }
+function decideMode(src){
+  // 未手动指定时：HTML 且含 <script> → 交互模式（否则脚本不执行会变静态）
+  if(state.userSetMode) return state.mode;
+  return (state.format==='html' && /<script[\s>]/i.test(src)) ? 'interactive' : 'static';
+}
+function renderContent(){
+  const src=$('#src').value; state.format=$('#fmt').value; state.originalSource=src;
+  if(!src.trim()){ toast(t('tNeedContent')); return; }
+  // 没有任何文档时（粘贴流），隐式建立第一篇
+  if(!liveDoc()){
+    const d=newDoc(t('untitled'), state.format, src, state.originalFile);
+    state.docs.push(d); state.activeId=d.id;
+  }
+  state.mode=decideMode(src);
+  $('#interMode').classList.toggle('on', state.mode==='interactive');
+  const html=toHtml(src);
+  clearRegionRects();
+  if(state.mode==='interactive'){
+    doc.style.display='none'; doc.innerHTML='';
+    frame.style.display='block';
+    frame.onload=()=>{ try{ const d=frame.contentDocument;
+        // 先给足高度再测：整页应用用 100vh 布局，若初始高度很小会量不出真实内容高
+        const PROBE=820; frame.style.height=PROBE+'px';
+        const h=(d.documentElement.scrollHeight||d.body.scrollHeight||0);
+        frame.style.height = (h>PROBE+10 ? h+4 : Math.max(160, Math.min(PROBE, h+4)))+'px';
+      }catch(e){} syncRegionLayerSize(); reindexAnnotations(); };
+    frame.srcdoc=html;
+    updateAnnotHint('interactive');
+  }else{
+    frame.style.display='none'; frame.removeAttribute('srcdoc');
+    doc.style.display='block'; doc.innerHTML=html; tagBlocks();
+    reindexAnnotations(); updateAnnotHint('static');
+  }
+  state.rendered=true;
+  $('#src').closest('.loader').querySelector('textarea').style.display='none';
+  $('#renderBtn').style.display='none'; $('#editBtn').style.display=''; $('#file').style.display='none';
+  syncRegionLayerSize(); syncActive(); renderTabs(); refreshOmit(); refreshUiShot();
+  toast(state.mode==='interactive' ? t('tInteractive') : t('tRendered'));
+}
+function updateAnnotHint(mode){
+  const el=$('#annot-hint'); if(!el) return;
+  el.innerHTML = (mode==='interactive') ? t('hintInteractive') : t('hintStatic');
+}
+// 可批注的块级元素；.gutter 是表格行号/列标栏，只作坐标参照、不可批注
+const BLOCK_SEL='p,h1,h2,h3,h4,h5,h6,li,blockquote,td:not(.gutter),th:not(.gutter),pre,figcaption,dd,dt';
+function tagBlocks(){
+  let i=0;
+  doc.querySelectorAll(BLOCK_SEL).forEach(el=>{
+    el.setAttribute('data-block',++i);
+    const b=document.createElement('button');
+    b.className='block-btn'; b.title='对整段添加批注'; b.textContent='💬'; b.contentEditable='false';
+    b.addEventListener('click',(e)=>{ e.stopPropagation(); addBlockAnnotation(el); });
+    el.appendChild(b);
+  });
+}
+
+/* ---------- ② 批注 ---------- */
+/* ---- 结构锚点：优先用真实坐标（单元格地址/页码），退化到块序号 ---- */
+function anchorOf(node){
+  const el = node && (node.nodeType===3 ? node.parentElement : node);
+  if(!el || !el.closest) return null;
+  const c=el.closest('[data-cell]');  if(c) return {type:'cell', ref:c.getAttribute('data-cell')};
+  const p=el.closest('[data-page]');  if(p) return {type:'page', ref:'第'+p.getAttribute('data-page')+'页'};
+  const b=el.closest('[data-block]'); if(b) return {type:'block', ref:`${b.tagName.toLowerCase()}#${b.getAttribute('data-block')}`};
+  return null;
+}
+function getBlockLabelOf(node){ const a=anchorOf(node); return a? a.ref : ''; }
+
+// 圈选：把框内覆盖到的单元格汇总成 Excel 区域（Sheet1!B2:D5）；图片页则给页码
+function anchorForRect(rect){
+  const inter = state.mode==='interactive';
+  const rootEl = inter ? frame.contentDocument.body : doc;
+  const off = inter ? {left:0,top:0} : doc.getBoundingClientRect();
+  const L=off.left+rect.x, T=off.top+rect.y, R=L+rect.w, B=T+rect.h;
+  const hit = el => { const r=el.getBoundingClientRect();
+    return r.right>L+1 && r.left<R-1 && r.bottom>T+1 && r.top<B-1; };
+  // 1) 单元格
+  const cells=[...rootEl.querySelectorAll('[data-cell]')].filter(hit)
+    .map(el=>el.getAttribute('data-cell'));
+  if(cells.length){
+    const parse=ref=>{ const i=ref.lastIndexOf('!');
+      const sheet=i>=0?ref.slice(0,i+1):'', a1=i>=0?ref.slice(i+1):ref;
+      const m=a1.match(/^([A-Z]+)(\d+)$/i); if(!m) return null;
+      let col=0; for(const ch of m[1].toUpperCase()) col=col*26+(ch.charCodeAt(0)-64);
+      return {sheet, col, row:+m[2]}; };
+    const ps=cells.map(parse).filter(Boolean);
+    if(ps.length){
+      const toL=n=>{ let s=''; while(n>0){ const r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=(n-r-1)/26; } return s; };
+      const c1=Math.min(...ps.map(p=>p.col)), c2=Math.max(...ps.map(p=>p.col));
+      const r1=Math.min(...ps.map(p=>p.row)), r2=Math.max(...ps.map(p=>p.row));
+      const sheet=ps[0].sheet;
+      const ref = (c1===c2&&r1===r2) ? `${sheet}${toL(c1)}${r1}` : `${sheet}${toL(c1)}${r1}:${toL(c2)}${r2}`;
+      return {type:'cell', ref};
+    }
+  }
+  // 2) 页
+  const pages=[...rootEl.querySelectorAll('[data-page]')].filter(hit)
+    .map(el=>+el.getAttribute('data-page')).sort((a,b)=>a-b);
+  if(pages.length) return {type:'page',
+    ref: pages.length===1 ? `第${pages[0]}页` : `第${pages[0]}–${pages[pages.length-1]}页`};
+  return null;
+}
+function wrapRange(range,id){
+  const root=range.commonAncestorContainer;
+  const walker=document.createTreeWalker(root.nodeType===3?root.parentNode:root,NodeFilter.SHOW_TEXT,{
+    acceptNode(n){ return range.intersectsNode(n)&&n.nodeValue.trim()!=='' ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT; }});
+  const nodes=[]; let n; while(n=walker.nextNode()) nodes.push(n);
+  nodes.forEach(tn=>{
+    const r=document.createRange(); r.selectNodeContents(tn);
+    if(tn===range.startContainer) r.setStart(tn,range.startOffset);
+    if(tn===range.endContainer) r.setEnd(tn,range.endOffset);
+    if(r.collapsed) return;
+    const m=document.createElement('mark'); m.className='annot'; m.dataset.aid=id;
+    try{ m.appendChild(r.extractContents()); r.insertNode(m);}catch(e){}
+  });
+}
+function bindMarkClick(id){
+  doc.querySelectorAll(`mark.annot[data-aid="${id}"]`).forEach(m=>m.addEventListener('click',(e)=>{e.stopPropagation();focusAnnotation(id);}));
+}
+function addSelectionAnnotation(){
+  const sel=window.getSelection();
+  if(!sel.rangeCount||sel.isCollapsed) return;
+  const range=sel.getRangeAt(0);
+  if(!doc.contains(range.commonAncestorContainer)){ toast(t('tSelectInDoc')); return; }
+  const quote=sel.toString().trim(); if(!quote) return;
+  const id=state.seq++, anchor=anchorOf(range.startContainer), blockLabel=anchor?anchor.ref:'';
+  wrapRange(range,id); bindMarkClick(id); sel.removeAllRanges();
+  state.annotations.push({id,kind:'selection',quote,blockLabel,anchor,comment:''});
+  renderList(); hideSelbar(); focusAnnotation(id,true);
+}
+function addBlockAnnotation(el){
+  const id=state.seq++;
+  const anchor=anchorOf(el);
+  const label=anchor? anchor.ref : `${el.tagName.toLowerCase()}#${el.getAttribute('data-block')}`;
+  const clone=el.cloneNode(true); clone.querySelectorAll('.block-btn').forEach(b=>b.remove());
+  const quote=clone.textContent.trim();
+  el.classList.add('block-annot'); el.dataset.aidBlock=(el.dataset.aidBlock||'')+' '+id;
+  state.annotations.push({id,kind:'block',quote,blockLabel:label,anchor,comment:''});
+  renderList(); focusAnnotation(id,true);
+}
+
+// -- 圈选批注 --
+const regionLayer=$('#regionLayer'), dragBox=$('#dragBox');
+function syncRegionLayerSize(){
+  const s=stageEl();
+  regionLayer.style.width=s.offsetWidth+'px';
+  regionLayer.style.height=s.offsetHeight+'px';
+  regionLayer.style.left=s.offsetLeft+'px';
+  regionLayer.style.top=s.offsetTop+'px';
+}
+function toggleRegion(){
+  state.regionOn=!state.regionOn;
+  regionLayer.classList.toggle('active',state.regionOn);
+  $('#regionMode').classList.toggle('on',state.regionOn);
+  if(state.regionOn){ syncRegionLayerSize(); toast(LANG==='zh'?'圈选模式：在内容上拖出一个框':'Region mode: drag a box over the content'); }
+}
+let dragging=false, startX=0, startY=0;
+regionLayer.addEventListener('mousedown',(e)=>{
+  if(!state.regionOn) return;
+  if(e.target.closest('.region-rect')) return; // 点已有框不新建
+  dragging=true;
+  const b=regionLayer.getBoundingClientRect();
+  startX=Math.max(0,Math.min(b.width, e.clientX-b.left));
+  startY=Math.max(0,Math.min(b.height, e.clientY-b.top));
+  Object.assign(dragBox.style,{display:'block',left:startX+'px',top:startY+'px',width:'0px',height:'0px'});
+});
+window.addEventListener('mousemove',(e)=>{
+  if(!dragging) return;
+  const b=regionLayer.getBoundingClientRect();
+  // 把框限制在文档区域内：拖出边界不再产生越界的选区
+  const clamp=(v,max)=>Math.max(0,Math.min(max,v));
+  const x=clamp(e.clientX-b.left, b.width), y=clamp(e.clientY-b.top, b.height);
+  Object.assign(dragBox.style,{left:Math.min(startX,x)+'px',top:Math.min(startY,y)+'px',
+    width:Math.abs(x-startX)+'px',height:Math.abs(y-startY)+'px'});
+});
+window.addEventListener('mouseup',async(e)=>{
+  if(!dragging) return; dragging=false; dragBox.style.display='none';
+  const rect={x:parseFloat(dragBox.style.left),y:parseFloat(dragBox.style.top),
+    w:parseFloat(dragBox.style.width),h:parseFloat(dragBox.style.height)};
+  if(rect.w<12||rect.h<12){ return; } // 太小忽略（视为误点）
+  await addRegionAnnotation(rect);
+});
+// 抓取框内底层 HTML 片段（取能完整包住框的最近祖先）。静态取 #doc；交互取 iframe 文档。
+function captureSnippet(rect){
+  const inter = state.mode==='interactive';
+  const rootDoc = inter ? frame.contentDocument : document;
+  const rootEl  = inter ? frame.contentDocument.body : doc;
+  const cx=rect.x+rect.w/2, cy=rect.y+rect.h/2;
+  // elementFromPoint 用各自文档的视口坐标：静态需加 #doc 在主视口的偏移；交互 iframe 未内部滚动，偏移为 0
+  const off = inter ? {left:0,top:0} : doc.getBoundingClientRect();
+  let el = rootDoc.elementFromPoint(off.left+cx, off.top+cy);
+  if(!el || !rootEl.contains(el)) el=rootEl;
+  const fits=(node)=>{ const r=node.getBoundingClientRect();
+    return r.left<=off.left+rect.x+2 && r.top<=off.top+rect.y+2 &&
+           r.right>=off.left+rect.x+rect.w-2 && r.bottom>=off.top+rect.y+rect.h-2; };
+  let node=el, guard=0;
+  while(node && node!==rootEl && !fits(node) && guard++<20) node=node.parentElement;
+  node = node||el;
+  const clone=node.cloneNode(true);
+  clone.querySelectorAll('.block-btn').forEach(b=>b.remove());
+  let html=clone.outerHTML||'';
+  if(html.length>2000) html=html.slice(0,2000)+'\n<!--（片段已截断）-->';
+  const media=[...node.querySelectorAll('img,svg,canvas,table,video')].map(m=>m.tagName.toLowerCase());
+  return {html, tag:node.tagName.toLowerCase(), media};
+}
+// 截图（html2canvas）；交互模式截 iframe 文档，失败返回空
+async function captureThumb(rect){
+  if(!window.html2canvas) return '';
+  try{
+    const inter = state.mode==='interactive';
+    const target = inter ? frame.contentDocument.documentElement : doc;
+    const scale=2;
+    const full=await window.html2canvas(target,{backgroundColor:'#ffffff',
+      scale, logging:false, useCORS:true,
+      ignoreElements:(el)=>el.classList?.contains('block-btn')||el.id==='regionLayer'});
+    const sx=rect.x*scale, sy=rect.y*scale, sw=rect.w*scale, sh=rect.h*scale;
+    const maxW=280, ratio=Math.min(1,maxW/rect.w);
+    const c=document.createElement('canvas'); c.width=rect.w*ratio; c.height=rect.h*ratio;
+    c.getContext('2d').drawImage(full,sx,sy,sw,sh,0,0,c.width,c.height);
+    return c.toDataURL('image/png');
+  }catch(e){ console.warn('截图失败',e); return ''; }
+}
+async function addRegionAnnotation(rect){
+  const id=state.seq++;
+  toast(t('tCapturing'));
+  const snip=captureSnippet(rect);
+  const thumb=await captureThumb(rect);
+  drawRegionRect(rect,id);
+  const anchor=anchorForRect(rect);   // 圈到表格/页面时给出真实区域坐标
+  state.annotations.push({id,kind:'region',rect,snippetHTML:snip.html,
+    quote:`[视觉区域·<${snip.tag}>${snip.media.length?(' 含'+snip.media.join('/')):''}]`,
+    blockLabel: anchor? anchor.ref : '圈选区域', anchor, thumb, comment:''});
+  renderList(); focusAnnotation(id,true);
+}
+function drawRegionRect(rect,id){
+  const d=document.createElement('div'); d.className='region-rect'; d.dataset.aid=id;
+  Object.assign(d.style,{left:rect.x+'px',top:rect.y+'px',width:rect.w+'px',height:rect.h+'px'});
+  d.innerHTML=`<span class="badge">${state.annotations.filter(a=>a.kind==='region').length+1}</span>`;
+  d.addEventListener('click',(e)=>{e.stopPropagation();focusAnnotation(id);});
+  regionLayer.appendChild(d);
+}
+function clearRegionRects(){ regionLayer.querySelectorAll('.region-rect').forEach(r=>r.remove()); }
+function renumberRegions(){
+  let i=0; state.annotations.filter(a=>a.kind==='region').forEach(a=>{
+    i++; const r=regionLayer.querySelector(`.region-rect[data-aid="${a.id}"] .badge`); if(r) r.textContent=i;
+  });
+}
+
+function removeAnnotation(id){
+  doc.querySelectorAll(`mark.annot[data-aid="${id}"]`).forEach(m=>{
+    const p=m.parentNode; while(m.firstChild) p.insertBefore(m.firstChild,m); p.removeChild(m); p.normalize();
+  });
+  doc.querySelectorAll('[data-block]').forEach(el=>{
+    if((el.dataset.aidBlock||'').split(' ').includes(String(id))){
+      el.dataset.aidBlock=(el.dataset.aidBlock||'').split(' ').filter(x=>x&&x!==String(id)).join(' ');
+      if(!el.dataset.aidBlock.trim()) el.classList.remove('block-annot');
+    }
+  });
+  regionLayer.querySelector(`.region-rect[data-aid="${id}"]`)?.remove();
+  state.annotations=state.annotations.filter(a=>a.id!==id);
+  renumberRegions(); renderList();
+}
+function focusAnnotation(id,scrollList){
+  document.querySelectorAll('mark.annot.focus,.region-rect.focus').forEach(m=>m.classList.remove('focus'));
+  doc.querySelectorAll(`mark.annot[data-aid="${id}"]`).forEach(m=>m.classList.add('focus'));
+  regionLayer.querySelector(`.region-rect[data-aid="${id}"]`)?.classList.add('focus');
+  document.querySelectorAll('.annot-card.focus').forEach(c=>c.classList.remove('focus'));
+  const card=document.querySelector(`.annot-card[data-aid="${id}"]`);
+  if(card){ card.classList.add('focus');
+    if(scrollList){ card.scrollIntoView({block:'center',behavior:'smooth'}); card.querySelector('textarea')?.focus(); } }
+}
+function renderList(){
+  const n=state.annotations.length;
+  const total=totalAnnots();                 // 导出/提交面向全部文档
+  $('#count').textContent=n; $('#cnt2').textContent=total;
+  ['#runAI','#exportPrompt','#exportPack','#exportOrder'].forEach(sel=>{ const b=$(sel); if(b) b.disabled=total===0; });
+  scheduleSave();   // 批注增删改后自动保存（函数声明已提升）
+  if(n===0){ listEl.innerHTML='<div class="empty">'+t('emptyList')+'</div>'; renderTabs(); return; }
+  listEl.innerHTML='';
+  state.annotations.forEach((a,idx)=>{
+    const card=document.createElement('div'); card.className='annot-card'; card.dataset.aid=a.id;
+    const kindTxt=a.kind==='selection'?t('kindSel'):a.kind==='block'?t('kindBlock'):t('kindRegion');
+    const pillCls=a.kind==='region'?'pill region':a.kind==='block'?'pill block':'pill sel';
+    card.innerHTML=`
+      <div class="row" style="justify-content:space-between">
+        <span class="${pillCls}">#${idx+1} · ${kindTxt} ${a.blockLabel?('· '+a.blockLabel):''}</span>
+        <button class="ghost" title="${esc(t('del'))}" data-del>🗑</button>
+      </div>
+      ${a.thumb?`<img class="thumb" src="${a.thumb}" alt="区域截图"/>`:''}
+      <div class="q">「${esc(a.quote.slice(0,140))}${a.quote.length>140?'…':''}」</div>
+      <textarea placeholder="${esc(t('commentPh'))}">${esc(a.comment)}</textarea>`;
+    card.querySelector('[data-del]').addEventListener('click',(e)=>{e.stopPropagation();removeAnnotation(a.id);});
+    card.querySelector('textarea').addEventListener('input',e=>{ a.comment=e.target.value; scheduleSave(); });
+    card.addEventListener('click',()=>focusAnnotation(a.id));
+    listEl.appendChild(card);
+  });
+  renderTabs();
+}
+function reindexAnnotations(){
+  state.annotations.filter(a=>a.kind==='selection').forEach(a=>{
+    if(doc.querySelector(`mark.annot[data-aid="${a.id}"]`)) return;
+    const walker=document.createTreeWalker(doc,NodeFilter.SHOW_TEXT); let node;
+    while(node=walker.nextNode()){ const i=node.nodeValue.indexOf(a.quote);
+      if(i>=0){ const r=document.createRange(); r.setStart(node,i); r.setEnd(node,i+a.quote.length);
+        wrapRange(r,a.id); bindMarkClick(a.id); break; } }
+  });
+  state.annotations.filter(a=>a.kind==='block').forEach(a=>{
+    const num=(a.blockLabel||'').split('#')[1]; const el=doc.querySelector(`[data-block="${num}"]`);
+    if(el){ el.classList.add('block-annot'); el.dataset.aidBlock=(el.dataset.aidBlock||'')+' '+a.id; }
+  });
+  // region 批注按保存的 rect 重画
+  state.annotations.filter(a=>a.kind==='region').forEach(a=>{ if(a.rect) drawRegionRect(a.rect,a.id); });
+}
+
+/* ---------- ③ 组装 prompt ---------- */
+function annotBlock(d){
+  const zh = LANG==='zh';
+  return d.annotations.map((a,i)=>{
+    const c=a.comment.trim() || (zh?'(未填写具体意见，请根据引用内容自行判断如何优化)':'(no specific note — judge from the quoted content how best to improve it)');
+    let ref;
+    if(a.kind==='region'){
+      ref = (zh? `圈选的视觉区域，对应底层 ${d.format.toUpperCase()} 片段：` : `Region selected; underlying ${d.format.toUpperCase()} snippet:`)
+          + `\n\`\`\`\n${a.snippetHTML}\n\`\`\`` + (a.thumb? (zh?'\n  · 该区域截图见随附图片。':'\n  · A screenshot of this region is attached.') : '');
+    } else {
+      ref = (zh?'引用原文：':'Quoted text: ') + JSON.stringify(a.quote);
+    }
+    const k = a.kind==='selection' ? (zh?'划词':'text') : a.kind==='block' ? (zh?'整段':'block') : (zh?'圈选视觉区域':'region');
+    return zh
+      ? `[批注 ${i+1}] 类型:${k} 位置:${a.blockLabel||'-'}\n  · ${ref}\n  · 修改意见：${c}`
+      : `[Note ${i+1}] type:${k} at:${a.blockLabel||'-'}\n  · ${ref}\n  · Requested change: ${c}`;
+  }).join('\n\n');
+}
+// 定位说明：告诉 AI「位置」是可直接使用的真实坐标
+function anchorNoteFor(docs){
+  const zh=LANG==='zh', kinds=new Set();
+  docs.forEach(d=>d.annotations.forEach(a=>{ if(a.anchor&&a.anchor.type) kinds.add(a.anchor.type); }));
+  let s='';
+  if(kinds.has('cell')) s += zh
+    ? '\n· 批注的「位置」是**真实单元格地址**（如 Sheet1!B3 或区域 Sheet1!B2:D5），请直接按该地址定位修改，不要凭表格外观猜测。'
+    : '\n· “at:” values are **real cell addresses** (e.g. Sheet1!B3, or a range Sheet1!B2:D5). Locate by that address — do not guess from the table layout.';
+  if(kinds.has('page')) s += zh
+    ? '\n· 批注的「位置」标注了**真实页码**，请定位到该页修改。'
+    : '\n· “at:” values carry **real page numbers** — apply the change on that page.';
+  return s ? (zh? '\n定位说明：'+s+'\n' : '\nHow to locate:'+s+'\n') : '';
+}
+function originNoteFor(d){
+  const zh=LANG==='zh', of=d.originalFile; if(!of) return '';
+  if(d.uiShot) return zh
+    ? `\n注意：下方是**界面截图**《${of.name}》，批注针对的是界面表现。请修改**产生该界面的源码**（HTML/CSS/JS）来满足这些意见，**不要去修图**。若你手上已有该项目源码，直接改源码并交付。\n`
+    : `\nNote: the item below is a **UI screenshot** (“${of.name}”); the notes describe UI problems. Revise the **source code that produces this UI** (HTML/CSS/JS) to satisfy them — do **not** edit the image. If you already have the project source, edit it directly and deliver that.\n`;
+  return zh
+    ? `\n注意：下方「原文」是文件《${of.name}》转换成的可批注视图${of.note?('（'+of.note+'）'):''}。请对**原始文件《${of.name}》**按批注修改并**保留其原始格式**（用对应的文档技能），不要只改这个视图。\n`
+    : `\nNote: the source below is an annotatable view generated from the file “${of.name}”${of.note?(' ('+of.note+')'):''}. Apply the changes to **the original file “${of.name}”** and **preserve its original format** (use the matching document skill) — do not just edit this view.\n`;
+}
+function rulesFor(d){
+  const zh=LANG==='zh', hasRegion=d.annotations.some(a=>a.kind==='region'), fmt=d.format.toUpperCase();
+  const r = zh ? [
+    '只修改批注涉及之处，其余内容尽量保持原样；',
+    `保持原有 ${fmt} 结构与格式有效；`,
+    '批注之间若有冲突，以更具体的意见为准，并保持全文风格一致；'
+  ] : [
+    'Change only what the notes call for; leave everything else as-is.',
+    `Keep the ${fmt} structure and formatting valid.`,
+    'If notes conflict, follow the more specific one and keep the overall voice consistent.'
+  ];
+  if(hasRegion) r.push(zh
+    ? '「圈选视觉区域」批注给出了对应底层片段（并可能随附截图），请据此修改相应的 HTML/CSS；'
+    : 'Region notes include the underlying snippet (and may include a screenshot) — use them to edit the corresponding HTML/CSS.');
+  return r.map((x,i)=>`${i+1}) ${x}`).join('\n');
+}
+function docSection(d, idx, total){
+  const zh=LANG==='zh', fmt=d.format.toUpperCase();
+  const head = zh ? `===== 文档 ${idx}/${total}：${d.name}（${fmt}）=====`
+                  : `===== DOCUMENT ${idx}/${total}: ${d.name} (${fmt}) =====`;
+  return `${head}${originNoteFor(d)}
+${sourceBlock(d)}
+${zh?`----- 批注（共 ${d.annotations.length} 条）-----`:`----- NOTES (${d.annotations.length}) -----`}
+${annotBlock(d)}`;
+}
+// 原文过大时自动建议只发批注（AI 通常已持有该文件）
+const BIG_SOURCE=120000;
+function omitSourceFor(d){ return state.omitSource==='on' || (state.omitSource==='auto' && (d.source||'').length>BIG_SOURCE); }
+function sourceBlock(d){
+  const zh=LANG==='zh';
+  if(omitSourceFor(d)) return zh
+    ? `----- 原文未附带（体积 ${Math.round(d.source.length/1024)}KB，请使用你手上的《${d.name}》原文件）-----`
+    : `----- SOURCE OMITTED (${Math.round(d.source.length/1024)}KB — use the copy of “${d.name}” you already have) -----`;
+  return zh ? `----- 原文开始 -----\n${d.source}\n----- 原文结束 -----`
+            : `----- SOURCE START -----\n${d.source}\n----- SOURCE END -----`;
+}
+function buildPrompt(){
+  const zh=LANG==='zh';
+  const docs=annotatedDocs();
+  // 无批注时退回当前文档，保证按钮任何时候都有合理输出
+  const list = docs.length? docs : (liveDoc()? [liveDoc()] : []);
+  if(!list.length) return '';
+  const anchors=anchorNoteFor(list);
+
+  if(list.length===1){
+    const d=list[0], fmt=d.format.toUpperCase();
+    return zh
+? `你是一名严谨的资深编辑/前端。下面是一份 ${fmt} 格式的文稿，以及针对其中多处的批注意见。${originNoteFor(d)}${anchors}
+请一次性根据【全部批注】对【原文】做整体修改，注意：
+${rulesFor(d)}
+${d.annotations.some(a=>a.kind==='region')?5:4}) 直接输出修改后的完整 ${fmt} 全文，不要任何解释、不要用代码块包裹。
+
+${sourceBlock(d)}
+
+===== 批注清单（共 ${d.annotations.length} 条）=====
+${annotBlock(d)}
+===== 批注结束 =====
+
+现在请输出修改后的完整 ${fmt} 全文：`
+: `You are a meticulous senior editor / front-end engineer. Below is one ${fmt} document and a set of annotations on it.${originNoteFor(d)}${anchors}
+Apply ALL the notes to the source in a single pass:
+${rulesFor(d)}
+${d.annotations.some(a=>a.kind==='region')?5:4}) Output the complete revised ${fmt} document only — no explanation, no code fences.
+
+${sourceBlock(d)}
+
+===== NOTES (${d.annotations.length}) =====
+${annotBlock(d)}
+===== NOTES END =====
+
+Now output the full revised ${fmt} document:`;
+  }
+
+  // 多文档：给出清晰的分文件输出契约，便于逐个回写
+  const total=list.length, n=list.reduce((s,d)=>s+d.annotations.length,0);
+  const sections=list.map((d,i)=>docSection(d,i+1,total)).join('\n\n');
+  const names=list.map(d=>d.originalFile? d.originalFile.name : d.name);
+  return zh
+? `你是一名严谨的资深编辑/前端。下面有 ${total} 份文档，每份都带有各自的批注意见（共 ${n} 条）。${anchors}
+请**逐份**按其自己的批注做整体修改，每份都遵守：
+${rulesFor(list[0])}
+
+输出格式（严格遵守，便于逐个回写文件）：对每份文档依次输出
+<<<FILE: 文件名>>>
+（该文档修改后的完整全文，不要解释、不要代码块包裹）
+<<<END>>>
+文件名请用：${names.join('、')}
+若某份文档标注了「原始文件」，请改写该原始文件并保留其原始格式。
+
+${sections}
+
+现在请按上述输出格式，依次给出全部 ${total} 份修改后的文档：`
+: `You are a meticulous senior editor / front-end engineer. Below are ${total} documents, each with its own annotations (${n} notes in total).${anchors}
+Revise EACH document according to its OWN notes. For every document:
+${rulesFor(list[0])}
+
+Output format (follow exactly, so each file can be written back):
+<<<FILE: filename>>>
+(the complete revised content of that document — no explanation, no code fences)
+<<<END>>>
+Use these filenames: ${names.join(', ')}
+Where a document names an “original file”, revise that original file and preserve its format.
+
+${sections}
+
+Now output all ${total} revised documents in the format above:`;
+}
+
+/* ---------- ④ 应用：调用 AI / diff ---------- */
+function regionImages(){ return state.annotations.filter(a=>a.kind==='region'&&a.thumb); }
+async function callAI(prompt){
+  const s=state.settings;
+  if(!s.apiKey){ settingsDlg.showModal(); throw new Error(LANG==='zh'?'请先填写 API Key':'Set an API key first'); }
+  const imgs=regionImages();
+  if(s.provider==='anthropic'){
+    const content=[{type:'text',text:prompt}];
+    imgs.forEach((a,i)=>{ const [meta,data]=a.thumb.split(','); content.push({type:'text',text:`（上文批注中"圈选"截图 ${i+1}）`});
+      content.push({type:'image',source:{type:'base64',media_type:'image/png',data}}); });
+    const res=await fetch(s.baseUrl.replace(/\/$/,'')+'/v1/messages',{method:'POST',
+      headers:{'content-type':'application/json','x-api-key':s.apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:s.model,max_tokens:+s.maxTokens,temperature:+s.temp,messages:[{role:'user',content}]})});
+    if(!res.ok) throw new Error('HTTP '+res.status+' '+(await res.text()).slice(0,300));
+    const j=await res.json(); return (j.content||[]).map(b=>b.text||'').join('');
+  } else {
+    const content=[{type:'text',text:prompt}];
+    imgs.forEach(a=>content.push({type:'image_url',image_url:{url:a.thumb}}));
+    const res=await fetch(s.baseUrl.replace(/\/$/,'')+'/chat/completions',{method:'POST',
+      headers:{'content-type':'application/json','authorization':'Bearer '+s.apiKey},
+      body:JSON.stringify({model:s.model,temperature:+s.temp,max_tokens:+s.maxTokens,
+        messages:[{role:'user',content: imgs.length?content:prompt}]})});
+    if(!res.ok) throw new Error('HTTP '+res.status+' '+(await res.text()).slice(0,300));
+    const j=await res.json(); return j.choices?.[0]?.message?.content||'';
+  }
+}
+function stripFence(t){ return t.replace(/^\s*```[a-zA-Z]*\n?/,'').replace(/\n?```\s*$/,'').trim(); }
+async function runAI(){
+  const prompt=buildPrompt(); const st=$('#ai-status');
+  st.textContent='正在请求 AI…'; $('#runAI').disabled=true;
+  try{ const out=stripFence(await callAI(prompt)); st.textContent=''; showResult(out); }
+  catch(e){ st.textContent=''; console.error(e);
+    if(confirm(t('aiFailed', e.message))){ copyPrompt(); manualPaste(); } }
+  finally{ $('#runAI').disabled=state.annotations.length===0; }
+}
+function manualPaste(){ const out=prompt(t('pastePrompt'));
+  if(out&&out.trim()) showResult(stripFence(out.trim())); }
+
+/* =====================================================================
+ * 结果层：行级 diff → hunk（可逐块采纳）+ 批注回执核验
+ * 设计要点：
+ *  - 采纳粒度是「实际文本改动块」，不假装能精确切分「第3条批注的改动」；
+ *  - 回执是**本地启发式**（看引用文本是否还原样存在），如实标注「未检出改动」
+ *    而非断言「未执行」——有些批注（如"这句后面加个数据"）本就不改原句。
+ * ===================================================================== */
+function lineOps(oldStr,newStr){
+  const a=oldStr.split('\n'), b=newStr.split('\n'), m=a.length,n=b.length;
+  const dp=Array.from({length:m+1},()=>new Int32Array(n+1));
+  for(let i=m-1;i>=0;i--)for(let j=n-1;j>=0;j--) dp[i][j]=a[i]===b[j]?dp[i+1][j+1]+1:Math.max(dp[i+1][j],dp[i][j+1]);
+  const ops=[]; let i=0,j=0;
+  while(i<m&&j<n){ if(a[i]===b[j]){ops.push({t:'eq',s:a[i]});i++;j++;}
+    else if(dp[i+1][j]>=dp[i][j+1]){ops.push({t:'del',s:a[i]});i++;} else {ops.push({t:'ins',s:b[j]});j++;} }
+  while(i<m) ops.push({t:'del',s:a[i++]});
+  while(j<n) ops.push({t:'ins',s:b[j++]});
+  return ops;
+}
+// 连续的 del/ins 归为一个改动块
+function buildHunks(ops){
+  const hunks=[]; let cur=null;
+  ops.forEach((o,idx)=>{
+    if(o.t==='eq'){ if(cur){ cur.end=idx-1; hunks.push(cur); cur=null; } return; }
+    if(!cur) cur={id:hunks.length+1, start:idx, end:idx, del:[], ins:[]};
+    (o.t==='del'? cur.del : cur.ins).push(o.s);
+  });
+  if(cur){ cur.end=ops.length-1; hunks.push(cur); }
+  return hunks;
+}
+// 按勾选重组最终文本：接受→用新行，拒绝→保留旧行
+function assemble(ops,hunks,accepted){
+  const owner=new Map();
+  hunks.forEach(h=>{ for(let k=h.start;k<=h.end;k++) owner.set(k,h.id); });
+  const out=[];
+  ops.forEach((o,idx)=>{
+    const hid=owner.get(idx);
+    if(hid===undefined){ out.push(o.s); return; }
+    const acc=accepted.has(hid);
+    if(acc && o.t==='ins') out.push(o.s);
+    if(!acc && o.t==='del') out.push(o.s);
+  });
+  return out.join('\n');
+}
+const norm = x => (x||'').replace(/\s+/g,' ').trim();
+// 一条批注用于核验的「指纹文本」
+function noteNeedle(a){
+  if(a.kind==='region'){
+    const tmp=document.createElement('div'); tmp.innerHTML=a.snippetHTML||'';
+    return norm(tmp.textContent).slice(0,60);
+  }
+  return norm(a.quote).slice(0,120);
+}
+function verifyNotes(d, newText){
+  const nt=norm(newText);
+  return d.annotations.map((a,i)=>{
+    const needle=noteNeedle(a);
+    // 指纹太短无法判定，避免误报
+    const undecidable = needle.length < 4;
+    const stillThere = !undecidable && nt.includes(needle);
+    return { i:i+1, a, needle, status: undecidable ? 'unknown' : (stillThere ? 'nochange' : 'changed') };
+  });
+}
+// 把改动块关联到可能对应的批注（用于展示，不用于采纳粒度）
+function linkHunks(hunks, checks){
+  hunks.forEach(h=>{
+    const delTxt=norm(h.del.join(' '));
+    h.notes = checks.filter(c=>c.needle.length>=4 && delTxt.includes(c.needle.slice(0,40))).map(c=>c.i);
+  });
+}
+
+// 解析多文档回传：<<<FILE: name>>> ... <<<END>>>
+function parseMultiFile(text){
+  const re=/<<<FILE:\s*(.+?)\s*>>>\s*([\s\S]*?)\s*<<<END>>>/g;
+  const out=[]; let m;
+  while((m=re.exec(text))) out.push({name:m[1].trim(), content:m[2]});
+  return out;
+}
+
+function showResult(newContent){
+  const parsed=parseMultiFile(newContent);
+  const docs=allDocs();
+  const matchDoc=(name)=> docs.find(d=>d.name===name || (d.originalFile&&d.originalFile.name===name)) || null;
+  let files;
+  if(parsed.length){
+    files=parsed.map(p=>{ const d=matchDoc(p.name) || liveDoc();
+      return { docId:d?d.id:null, name:p.name, oldText:d?d.source:'', newText:stripFence(p.content) }; });
+  }else{
+    const d=liveDoc();
+    files=[{ docId:d?d.id:null, name:d?d.name:'', oldText:d?d.source:'', newText:newContent }];
+  }
+  files.forEach(f=>{
+    f.ops=lineOps(f.oldText, f.newText);
+    f.hunks=buildHunks(f.ops);
+    f.accepted=new Set(f.hunks.map(h=>h.id));       // 默认全部接受
+    const d=docs.find(x=>x.id===f.docId);
+    f.checks = d ? verifyNotes(d, f.newText) : [];
+    linkHunks(f.hunks, f.checks);
+  });
+  RESULT={files, idx:0};
+  renderResult(); switchTab('changes'); resultDlg.showModal();
+}
+function curFile(){ return RESULT.files[RESULT.idx]; }
+function renderResult(){
+  const f=curFile(); if(!f) return;
+  // 多文件时给出文件切换条
+  const fb=$('#fileBar');
+  if(RESULT.files.length>1){
+    fb.style.display='flex';
+    fb.innerHTML=RESULT.files.map((x,i)=>
+      `<button class="${i===RESULT.idx?'primary':''}" data-fi="${i}">${esc(x.name)}</button>`).join('');
+    fb.querySelectorAll('button').forEach(b=>b.onclick=()=>{ RESULT.idx=+b.dataset.fi; renderResult(); });
+  }else fb.style.display='none';
+  renderHunks(f); renderReceipt(f); renderPreview(f);
+  $('#rawBox').value=f.newText;
+  updateApplyBtn();
+}
+function renderHunks(f){
+  const box=$('#hunkList');
+  if(!f.hunks.length){ box.innerHTML=`<div class="empty">${t('noChanges')}</div>`; return; }
+  box.innerHTML='';
+  f.hunks.forEach(h=>{
+    const el=document.createElement('div');
+    el.className='hunk'+(f.accepted.has(h.id)?'':' off'); el.dataset.hid=h.id;
+    const tags=(h.notes||[]).map(n=>`<span class="tag">#${n}</span>`).join('');
+    el.innerHTML=`<div class="hunk-head">
+        <span>#${h.id}</span>${tags}<span class="grow"></span>
+        <label class="sw"><input type="checkbox" ${f.accepted.has(h.id)?'checked':''}/> ${esc(t('acceptThis'))}</label>
+      </div>
+      ${h.del.length?`<pre class="d">${h.del.map(l=>'- '+esc(l)).join('\n')}</pre>`:''}
+      ${h.ins.length?`<pre class="i">${h.ins.map(l=>'+ '+esc(l)).join('\n')}</pre>`:''}`;
+    el.querySelector('input').onchange=(e)=>{
+      if(e.target.checked) f.accepted.add(h.id); else f.accepted.delete(h.id);
+      el.classList.toggle('off', !e.target.checked); updateApplyBtn();
+    };
+    box.appendChild(el);
+  });
+}
+function renderReceipt(f){
+  const box=$('#receiptList');
+  if(!f.checks.length){ box.innerHTML=`<div class="empty">${t('noNotes')}</div>`; return; }
+  const changed=f.checks.filter(c=>c.status==='changed').length;
+  const total=f.checks.length;
+  $('#receiptSummary').innerHTML = t('receiptSummary', changed, total)
+    + (changed<total ? ` <b>${t('receiptWarn', total-changed)}</b>` : '');
+  box.innerHTML='';
+  f.checks.forEach(c=>{
+    const row=document.createElement('div');
+    const st=c.status==='changed'?'ok':c.status==='nochange'?'warn':'unk';
+    row.className='receipt-row '+st;
+    row.innerHTML=`<span class="rst">${c.status==='changed'?'✓':c.status==='nochange'?'⚠':'?'}</span>
+      <div class="grow">
+        <div class="rhead">#${c.i} · ${esc(c.a.blockLabel||'-')} · <span class="muted">${esc(t(
+          c.status==='changed'?'stChanged':c.status==='nochange'?'stNoChange':'stUnknown'))}</span></div>
+        <div class="rq">${esc((c.a.comment||t('noComment')).slice(0,120))}</div>
+      </div>`;
+    box.appendChild(row);
+  });
+  $('#resubmitBtn').style.display = changed<total ? '' : 'none';
+}
+function renderPreview(f){
+  const d=allDocs().find(x=>x.id===f.docId);
+  const fmt=d?d.format:'html';
+  const html = fmt==='html'? f.newText : fmt==='markdown'? mdToHtml(f.newText)
+    : fmt==='csv'? csvToTable(f.newText)
+    : f.newText.split(/\n{2,}/).map(p=>'<p>'+esc(p)+'</p>').join('');
+  $('#previewBox').innerHTML=html;
+}
+function updateApplyBtn(){
+  const f=curFile(); if(!f) return;
+  const a=f.accepted.size, tot=f.hunks.length;
+  $('#acceptResult').textContent = t('applySelected', a, tot);
+  $('#acceptResult').disabled = tot>0 && a===0 && RESULT.files.length===1;
+}
+function switchTab(name){
+  document.querySelectorAll('.tabbar button').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
+  ['changes','receipt','preview','raw'].forEach(k=>{
+    const el=$('#tab-'+k); if(el) el.style.display = (k===name)?'':'none'; });
+}
+// 应用：逐文件按勾选重组，写回各自文档；已生效的批注移除，未检出的保留以便重提
+function acceptResult(){
+  const docs=allDocs(); let applied=0;
+  RESULT.files.forEach(f=>{
+    const d=docs.find(x=>x.id===f.docId); if(!d) return;
+    const finalText = f.hunks.length ? assemble(f.ops, f.hunks, f.accepted) : f.newText;
+    if(finalText===d.source) return;
+    d.source=finalText; applied++;
+    // 对「最终重组文本」重新核验：指纹已消失=该批注确实生效→移除；仍在=保留待处理
+    d.annotations = d.annotations.filter(a=>{
+      const needle=noteNeedle(a);
+      if(needle.length<4) return false;          // 无法判定的，按已处理移除，避免堆积
+      return norm(finalText).includes(needle);   // 原文仍在 → 尚未生效，保留
+    });
+    d.seq = d.annotations.reduce((m,a)=>Math.max(m,a.id||0),0)+1;
+  });
+  const act=liveDoc();
+  if(act){ adoptDoc(act); clearRegionRects(); renderContent(); renumberRegions(); }
+  renderList(); renderTabs(); resultDlg.close();
+  toast(t('tApplied', applied));
+}
+// 把「未检出改动」的批注对着新版重新提交一次——直接对冲 AI 漏改
+function resubmitUnapplied(){
+  const f=curFile(); if(!f) return;
+  const pending=f.checks.filter(c=>c.status!=='changed');
+  if(!pending.length) return;
+  const zh=LANG==='zh';
+  const fakeDoc={ name:f.name, format:(allDocs().find(x=>x.id===f.docId)||{}).format||'html',
+    source:f.newText, originalFile:(allDocs().find(x=>x.id===f.docId)||{}).originalFile||null,
+    annotations:pending.map(c=>c.a) };
+  const body = zh
+? `你上一轮的修改里，以下 ${pending.length} 条批注**没有检测到对应改动**。请只针对这些批注，在下面这份（已经改过一轮的）全文上再修改一次，其余部分保持原样。
+直接输出修改后的完整全文，不要解释、不要代码块包裹。
+
+===== 当前全文 =====
+${f.newText}
+===== 全文结束 =====
+
+===== 待处理批注（${pending.length} 条）=====
+${annotBlock(fakeDoc)}
+===== 结束 =====
+
+现在请输出修改后的完整全文：`
+: `In your previous pass, no corresponding change was detected for the following ${pending.length} note(s). Apply ONLY these notes to the (already once-revised) text below, leaving everything else untouched.
+Output the complete revised text only — no explanation, no code fences.
+
+===== CURRENT TEXT =====
+${f.newText}
+===== END =====
+
+===== REMAINING NOTES (${pending.length}) =====
+${annotBlock(fakeDoc)}
+===== END =====
+
+Now output the full revised text:`;
+  const stamp=new Date().toISOString().replace(/[:T]/g,'-').slice(0,16);
+  copyText(body);
+  download(`annotation-followup-${stamp}.md`, body, 'text/markdown');
+  toast(t('tResubmit', pending.length));
+}
+
+/* ---------- 剪贴板 / 导出 ---------- */
+async function copyText(txt){ try{ await navigator.clipboard.writeText(txt); toast(t('tCopied')); }
+  catch(e){ const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();toast(t('tCopied')); } }
+function copyPrompt(){ copyText(buildPrompt()); }
+function download(name,data,mime){
+  // 支持字符串或 Blob；挂到 DOM 再点击，延迟 revoke——否则大文件(含截图)会被立即取消导致「无响应」
+  const blob = data instanceof Blob ? data : new Blob([data],{type:mime||'text/plain'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=name; a.style.display='none';
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 4000);
+}
+// 主推：把「原文+全部批注」导成一个文件，拖回 Claude 即可批量修改（不用复制长文本）
+function exportOrder(){
+  const stamp=new Date().toISOString().replace(/[:T]/g,'-').slice(0,16);
+  // 文件名用 ASCII，避免部分浏览器对中文名丢扩展名
+  download(`annotation-order-${stamp}.md`, buildPrompt(), 'text/markdown');
+  toast(t('tOrderExported'));
+}
+function exportPack(){
+  const docs=allDocs();
+  const pack={ version:4, lang:LANG, exportedAt:new Date().toISOString(),
+    docs: docs.map(d=>({ name:d.name, format:d.format, mode:d.mode,
+      originalFile:d.originalFile||undefined, original:d.source,
+      annotations:d.annotations.map(a=>({...a})) })),
+    prompt: buildPrompt() };
+  // v3 兼容字段：单文档时同时给出旧结构，老流程仍可读
+  if(docs.length===1){ Object.assign(pack, { format:docs[0].format, mode:docs[0].mode,
+    originalFile:docs[0].originalFile||undefined, original:docs[0].source,
+    annotations:docs[0].annotations.map(a=>({...a})) }); }
+  download('annotation-pack-'+Date.now()+'.json', JSON.stringify(pack,null,2), 'application/json');
+  toast(t('tPackExported'));
+}
+
+/* =====================================================================
+ * 会话持久化：本地自动保存 + 恢复；批注包回载
+ * 说明：localStorage 在部分环境（沙箱预览/隐私模式）不可用，故全部 try/catch，
+ *      不可用时降级为「不保存」并提示用户及时导出批注包，不影响其它功能。
+ * ===================================================================== */
+// 被嵌在 iframe 里预览时用独立键，避免内层实例覆盖宿主的会话
+const EMBEDDED = (()=>{ try{ return window.self!==window.top; }catch(e){ return true; } })();
+const STORE_KEY='smart-annotator:last'+(EMBEDDED?':embedded':'');
+let storeOK=(()=>{ try{ localStorage.setItem('__sa_probe','1'); localStorage.removeItem('__sa_probe'); return true; }catch(e){ return false; } })();
+
+function sessionPayload(dropThumbs){
+  syncActive();
+  return { v:2, savedAt:Date.now(), lang:LANG, activeId:state.activeId, docSeq:state.docSeq,
+    docs: state.docs.map(d=>({ ...d, annotations: d.annotations.map(a=> dropThumbs ? {...a, thumb:''} : a) })),
+    thumbsDropped: !!dropThumbs };
+}
+function markSaved(extra){
+  const el=$('#saveHint'); if(!el) return;
+  const d=new Date(), p=n=>String(n).padStart(2,'0');
+  el.textContent=t('savedAt', p(d.getHours())+':'+p(d.getMinutes()))+(extra||'');
+}
+function saveSession(){
+  if(!storeOK || !state.rendered) return;
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(sessionPayload(false))); markSaved(); }
+  catch(e){ // 多为超出配额（圈选截图较大）：退化为不存截图
+    try{ localStorage.setItem(STORE_KEY, JSON.stringify(sessionPayload(true))); markSaved(t('savedNoThumb')); }
+    catch(e2){ storeOK=false; const el=$('#saveHint'); if(el) el.textContent=t('saveUnavailable'); }
+  }
+}
+let saveTimer=null;
+function scheduleSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveSession, 500); }
+function loadSaved(){ if(!storeOK) return null;
+  try{ const raw=localStorage.getItem(STORE_KEY); return raw? JSON.parse(raw) : null; }catch(e){ return null; } }
+function clearSaved(){ try{ localStorage.removeItem(STORE_KEY); }catch(e){} }
+
+// 用一份「会话数据」重建界面（供恢复上次 / 载入批注包共用）；兼容单/多文档两种载荷
+function applySession(s, tip){
+  let docs;
+  if(Array.isArray(s.docs) && s.docs.length){
+    docs = s.docs.map((d,i)=>({ id:d.id||('d'+(i+1)), name:d.name||t('untitled'), format:d.format||'html',
+      source:d.source!==undefined? d.source : (d.original||''), mode:d.mode||'static',
+      userSetMode:!!d.mode, originalFile:d.originalFile||null,
+      annotations:(d.annotations||[]).map(a=>({...a})),
+      seq:d.seq || ((d.annotations||[]).reduce((m,a)=>Math.max(m,a.id||0),0)+1) }));
+  }else{
+    docs = [{ id:'d1', name:(s.originalFile&&s.originalFile.name)||s.name||t('untitled'),
+      format:s.format||'html', source:s.originalSource||s.original||'', mode:s.mode||'static',
+      userSetMode:!!s.mode, originalFile:s.originalFile||null,
+      annotations:(s.annotations||[]).map(a=>({...a})),
+      seq:s.seq || ((s.annotations||[]).reduce((m,a)=>Math.max(m,a.id||0),0)+1) }];
+  }
+  state.docs=docs;
+  state.docSeq = s.docSeq || (docs.length+1);
+  const act = docs.find(d=>d.id===s.activeId) || docs[0];
+  clearRegionRects(); adoptDoc(act);
+  renderContent();          // 内部会 reindexAnnotations()，重新落上高亮/整段/圈选框
+  renumberRegions(); renderList(); renderTabs();
+  const n = docs.reduce((m,d)=>m+d.annotations.length,0);
+  toast(tip || t('tRestored', n));
+}
+async function loadPackFile(f){
+  try{
+    const pack = JSON.parse(await f.text());
+    const multi = Array.isArray(pack.docs) && pack.docs.length;
+    if(!multi && !Array.isArray(pack.annotations)) throw new Error(t('packInvalid'));
+    if(!multi && !pack.original) throw new Error(t('packNoSource'));
+    const n = multi ? pack.docs.reduce((m,d)=>m+((d.annotations||[]).length),0) : pack.annotations.length;
+    applySession(multi ? { docs:pack.docs } : { format:pack.format, mode:pack.mode,
+      originalSource:pack.original, originalFile:pack.originalFile, annotations:pack.annotations },
+      t('tPackLoaded', n));
+  }catch(e){ alert(t('packFailed', e.message)); }
+}
+
+/* =====================================================================
+ * 多文档：每篇文件一个标签，各自独立累积批注；导出时合并成一份批注单
+ * 实现：state.* 始终是「当前文档」的活动副本，切换时与 state.docs 互相同步
+ * ===================================================================== */
+function liveDoc(){ return state.docs.find(d=>d.id===state.activeId) || null; }
+function syncActive(){                       // 活动状态 → docs
+  const d=liveDoc(); if(!d) return;
+  d.format=state.format; d.source=state.originalSource; d.mode=state.mode;
+  d.userSetMode=state.userSetMode; d.originalFile=state.originalFile;
+  d.annotations=state.annotations; d.seq=state.seq;
+}
+function adoptDoc(d){                        // docs → 活动状态
+  state.activeId=d.id; state.format=d.format||'html'; state.originalSource=d.source||'';
+  state.mode=d.mode||'static'; state.userSetMode=!!d.userSetMode; state.originalFile=d.originalFile||null;
+  state.annotations=d.annotations||[]; state.seq=d.seq||1;
+  $('#fmt').value=state.format; $('#src').value=state.originalSource;
+}
+function newDoc(name, format, source, originalFile){
+  return { id:'d'+(state.docSeq++), name:name||t('untitled'), format:format||'html',
+           source:source||'', mode:'static', userSetMode:false,
+           originalFile:originalFile||null, annotations:[], seq:1 };
+}
+function activateDoc(id){
+  if(id===state.activeId) return;
+  syncActive();
+  const d=state.docs.find(x=>x.id===id); if(!d) return;
+  clearRegionRects(); adoptDoc(d); renderContent(); renumberRegions(); renderList(); renderTabs();
+}
+function closeDoc(id){
+  const i=state.docs.findIndex(d=>d.id===id); if(i<0) return;
+  const d=state.docs[i];
+  if(d.annotations.length && !confirm(t('cfgCloseTab', d.name))) return;
+  state.docs.splice(i,1);
+  if(state.activeId===id){
+    const nxt=state.docs[Math.min(i, state.docs.length-1)];
+    if(nxt){ clearRegionRects(); adoptDoc(nxt); renderContent(); renumberRegions(); }
+    else { state.activeId=null; state.annotations=[]; state.originalSource=''; state.originalFile=null;
+           state.rendered=false; doc.innerHTML=''; $('#src').value=''; clearRegionRects();
+           $('#src').closest('.loader').querySelector('textarea').style.display='';
+           $('#renderBtn').style.display=''; $('#editBtn').style.display='none'; $('#file').style.display=''; }
+  }
+  renderList(); renderTabs(); scheduleSave(); toast(t('tDocClosed'));
+}
+function renderTabs(){
+  const bar=$('#docTabs'); if(!bar) return;
+  bar.innerHTML='';
+  // 单文档时不显示标签栏，避免无谓的界面负担
+  if(state.docs.length<2){ bar.classList.remove('show');
+    if(state.docs.length<=1){ updateScopeHint(); return; } }
+  bar.classList.add('show');
+  state.docs.forEach(d=>{
+    const el=document.createElement('div');
+    el.className='doc-tab'+(d.id===state.activeId?' active':'');
+    const n=(d.id===state.activeId? state.annotations.length : d.annotations.length);
+    el.innerHTML=`<span class="nm">${esc(d.name)}</span>`+(n?`<span class="cnt">${n}</span>`:'')+
+                 `<span class="x" title="${esc(t('closeTab'))}">✕</span>`;
+    el.onclick=(e)=>{ if(e.target.classList.contains('x')){ e.stopPropagation(); closeDoc(d.id); } else activateDoc(d.id); };
+    bar.appendChild(el);
+  });
+  const add=document.createElement('div');
+  add.className='doc-tab add'; add.textContent=t('addFiles');
+  add.onclick=()=>$('#file').click();
+  bar.appendChild(add);
+  updateScopeHint();
+}
+function updateScopeHint(){
+  const el=$('#scopeHint'); if(!el) return;
+  const d=liveDoc();
+  if(!d){ el.textContent=''; return; }
+  if(state.docs.length<2){ el.textContent=t('scopeOne', d.name); return; }
+  syncActive();
+  const withAnnots=state.docs.filter(x=>x.annotations.length).length;
+  el.textContent=t('scopeMulti', d.name, withAnnots, state.docs.length);
+}
+// 汇总所有文档（含当前活动的）
+function allDocs(){ syncActive(); return state.docs; }
+function annotatedDocs(){ return allDocs().filter(d=>d.annotations.length); }
+function totalAnnots(){ return allDocs().reduce((s,d)=>s+d.annotations.length,0); }
+
+/* ---------- 选区悬浮条 ---------- */
+const selbar=$('#selbar');
+function hideSelbar(){ selbar.style.display='none'; }
+doc.addEventListener('mouseup',()=>{ if(state.regionOn) return; setTimeout(()=>{
+  const sel=window.getSelection();
+  if(!sel.rangeCount||sel.isCollapsed||!sel.toString().trim()){ hideSelbar(); return; }
+  const r=sel.getRangeAt(0); if(!doc.contains(r.commonAncestorContainer)){ hideSelbar(); return; }
+  const rect=r.getBoundingClientRect(), host=$('#left').getBoundingClientRect();
+  selbar.style.display='flex';
+  selbar.style.left=(rect.left-host.left+$('#left').scrollLeft+rect.width/2-55)+'px';
+  selbar.style.top=(rect.top-host.top+$('#left').scrollTop-40)+'px';
+},10); });
+document.addEventListener('mousedown',(e)=>{ if(!selbar.contains(e.target)) hideSelbar(); });
+window.addEventListener('resize',()=>{ if(state.rendered) syncRegionLayerSize(); });
+
+/* ---------- 事件绑定 ---------- */
+$('#renderBtn').onclick=renderContent;
+$('#editBtn').onclick=()=>{ $('#src').closest('.loader').querySelector('textarea').style.display='';
+  $('#renderBtn').style.display=''; $('#editBtn').style.display='none'; $('#file').style.display='';
+  toast(t('tEditSrc')); };
+$('#regionMode').onclick=toggleRegion;
+$('#interMode').onclick=()=>{
+  state.userSetMode=true;
+  state.mode = state.mode==='interactive' ? 'static' : 'interactive';
+  if(state.annotations.length && !confirm(t('cfgSwitchMode'))){ state.mode = state.mode==='interactive'?'static':'interactive'; return; }
+  [...state.annotations].forEach(a=>removeAnnotation(a.id));
+  if(state.rendered) renderContent();
+  else $('#interMode').classList.toggle('on', state.mode==='interactive');
+  toast(state.mode==='interactive'? t('tModeInter') : t('tModeStatic'));
+};
+$('#selAnnot').onclick=addSelectionAnnotation;
+$('#clearAll').onclick=()=>{ if(state.annotations.length&&confirm(t('cfgClearAll'))) [...state.annotations].forEach(a=>removeAnnotation(a.id)); };
+$('#exportOrder').onclick=exportOrder; $('#exportPrompt').onclick=copyPrompt; $('#exportPack').onclick=exportPack; $('#runAI').onclick=runAI;
+// 把一个文件读成「文档」；二进制文档返回 null 并给出说明
+async function fileToDoc(f){
+  if(/\.(docx|xlsx|xls|pptx|pdf)$/i.test(f.name)){
+    const ext=f.name.split('.').pop().toUpperCase();
+    doc.style.display='block'; frame.style.display='none';
+    doc.innerHTML=`<div style="padding:10px 4px">
+      <h2 style="font-family:var(--font-display)">${esc(t('binTitle',ext))}</h2>${t('binBody', esc(f.name), ext)}</div>`;
+    state.rendered=true; toast(t('tBinNotice',ext));
+    return null;
+  }
+  if(/\.(png|jpe?g|gif|webp|svg)$/i.test(f.name) || (f.type||'').startsWith('image/')){
+    const dataURL=await new Promise(r=>{const rd=new FileReader();rd.onload=()=>r(rd.result);rd.readAsDataURL(f);});
+    return newDoc(f.name,'html',
+      `<div style="text-align:center"><img src="${dataURL}" alt="${esc(f.name)}" style="max-width:100%"/></div>`,
+      {name:f.name, note:'image — annotate with Region; rewriting needs an image tool'});
+  }
+  const text=await f.text();
+  const fmt = /\.(md|markdown)$/i.test(f.name) ? 'markdown'
+            : /\.(html?|htm)$/i.test(f.name)   ? 'html'
+            : /\.csv$/i.test(f.name)           ? 'csv' : 'text';
+  return newDoc(f.name, fmt, text, null);
+}
+// 多选文件 → 每个文件一篇文档；自动切到第一篇新加的
+$('#file').onchange=async(e)=>{
+  const files=[...e.target.files]; if(!files.length) return;
+  syncActive();
+  const added=[];
+  for(const f of files){ const d=await fileToDoc(f); if(d){ state.docs.push(d); added.push(d); } }
+  e.target.value='';
+  if(!added.length) return;
+  clearRegionRects(); adoptDoc(added[0]); renderContent(); renderList(); renderTabs();
+  if(added.length>1) toast(t('tDocAdded', added.length));
+};
+function refreshUiShot(){
+  const d=liveDoc(), wrap=$('#uiShotWrap'), cb=$('#uiShot'); if(!wrap||!cb) return;
+  const isImg = !!(d && d.originalFile && /\.(png|jpe?g|gif|webp|svg)$/i.test(d.originalFile.name||''));
+  wrap.style.display = isImg ? '' : 'none';
+  cb.checked = !!(d && d.uiShot);
+}
+$('#uiShot').onchange=(e)=>{ const d=liveDoc(); if(d){ d.uiShot=e.target.checked; syncActive(); scheduleSave(); } };
+function refreshOmit(){
+  const d=liveDoc(); const el=$('#omitHint'), cb=$('#omitSrc'); if(!el||!cb) return;
+  const big = d && (d.source||'').length>BIG_SOURCE;
+  if(state.omitSource==='auto'){ cb.checked=!!big;
+    el.textContent = big ? t('omitAuto', Math.round(d.source.length/1024)) : ''; }
+  else { cb.checked = state.omitSource==='on';
+    el.textContent = cb.checked ? t('omitOn') : ''; }
+}
+$('#omitSrc').onchange=(e)=>{ state.omitSource = e.target.checked?'on':'off'; refreshOmit(); scheduleSave(); };
+/* ---------- 批注栏宽度：拖拽调整，上限窗口 1/3 ---------- */
+const SIDE_MIN=300, SIDE_DEF=400;
+const sideMax = ()=> Math.max(SIDE_MIN, Math.round(window.innerWidth/3));
+function setSideWidth(px, persist){
+  const w=Math.round(Math.min(sideMax(), Math.max(SIDE_MIN, px)));
+  document.documentElement.style.setProperty('--side-w', w+'px');
+  if(persist){ try{ localStorage.setItem('smart-annotator:sidew', String(w)); }catch(e){} }
+  if(state.rendered) syncRegionLayerSize();
+}
+(function initSideWidth(){
+  let w=SIDE_DEF; try{ const v=+localStorage.getItem('smart-annotator:sidew'); if(v) w=v; }catch(e){}
+  setSideWidth(w,false);
+})();
+(function bindGrip(){
+  const grip=$('#sideGrip'); if(!grip) return;
+  let dragging=false;
+  const move=(e)=>{ if(!dragging) return;
+    const x=(e.touches? e.touches[0].clientX : e.clientX);
+    setSideWidth(window.innerWidth - x, false); };
+  const up=()=>{ if(!dragging) return; dragging=false;
+    grip.classList.remove('dragging'); document.body.classList.remove('resizing');
+    const cur=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--side-w'))||SIDE_DEF;
+    setSideWidth(cur,true); };
+  const down=(e)=>{ dragging=true; grip.classList.add('dragging');
+    document.body.classList.add('resizing'); e.preventDefault(); };
+  grip.addEventListener('mousedown',down);
+  grip.addEventListener('touchstart',down,{passive:false});
+  window.addEventListener('mousemove',move);
+  window.addEventListener('touchmove',move,{passive:false});
+  window.addEventListener('mouseup',up); window.addEventListener('touchend',up);
+  grip.addEventListener('dblclick',()=>setSideWidth(SIDE_DEF,true));
+})();
+// 窗口变窄时收进上限，避免侧栏挤掉正文
+window.addEventListener('resize',()=>{
+  const cur=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--side-w'))||SIDE_DEF;
+  if(cur>sideMax()) setSideWidth(sideMax(),true);
+});
+$('#loadPack').onclick=()=>$('#packFile').click();
+$('#packFile').onchange=async(e)=>{ const f=e.target.files[0]; if(f) await loadPackFile(f); e.target.value=''; };
+document.querySelectorAll('.tabbar button').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
+$('#acceptAll').onclick=()=>{ const f=curFile(); if(!f)return; f.hunks.forEach(h=>f.accepted.add(h.id)); renderHunks(f); updateApplyBtn(); };
+$('#rejectAll').onclick=()=>{ const f=curFile(); if(!f)return; f.accepted.clear(); renderHunks(f); updateApplyBtn(); };
+$('#resubmitBtn').onclick=resubmitUnapplied;
+$('#copyResult').onclick=()=>copyText($('#rawBox').value);
+$('#acceptResult').onclick=acceptResult;
+$('#settingsBtn').onclick=()=>{ loadSettingsToForm(); settingsDlg.showModal(); };
+$('#provider').onchange=(e)=>{ if(e.target.value==='anthropic'){ $('#baseUrl').value='https://api.anthropic.com'; $('#model').value='claude-sonnet-4-5'; }
+  else { $('#baseUrl').value='https://api.openai.com/v1'; $('#model').value='gpt-4o-mini'; } };
+function loadSettingsToForm(){ const s=state.settings;
+  $('#provider').value=s.provider; $('#baseUrl').value=s.baseUrl; $('#apiKey').value=s.apiKey;
+  $('#model').value=s.model; $('#maxTokens').value=s.maxTokens; $('#temp').value=s.temp; }
+$('#saveSettings').onclick=()=>{ Object.assign(state.settings,{provider:$('#provider').value,baseUrl:$('#baseUrl').value.trim(),
+  apiKey:$('#apiKey').value.trim(),model:$('#model').value.trim(),maxTokens:$('#maxTokens').value,temp:$('#temp').value});
+  settingsDlg.close(); toast(t('tSettingsSaved')); };
+
+$('#sampleBtn').onclick=()=>{ $('#fmt').value='html'; state.originalFile=null; state.userSetMode=false;
+  $('#src').value=
+`<h1 style="font-family:sans-serif">秋季新品发布会 · 数据看板</h1>
+<p>本周四，我们非常激动地宣布，公司即将推出全新旗舰产品线，这将彻底改变行业格局，是史上最强、最完美、无可挑剔的解决方案。</p>
+<div style="display:flex;gap:16px;margin:16px 0">
+  <div style="flex:1;background:#eef;border-radius:10px;padding:18px;text-align:center">
+    <div style="font-size:34px;font-weight:800;color:#345">+128%</div><div>同比增长</div></div>
+  <div style="flex:1;background:#efe;border-radius:10px;padding:18px;text-align:center">
+    <div style="font-size:34px;font-weight:800;color:#353">4.9★</div><div>用户评分</div></div>
+  <div style="flex:1;background:#fee;border-radius:10px;padding:18px;text-align:center">
+    <div style="font-size:34px;font-weight:800;color:#533">¥ 999</div><div>首发价</div></div>
+</div>
+<svg width="300" height="90" style="margin:8px 0">
+  <rect x="10" y="40" width="40" height="40" fill="#8ab"/><rect x="70" y="20" width="40" height="60" fill="#8ab"/>
+  <rect x="130" y="10" width="40" height="70" fill="#8ab"/><rect x="190" y="30" width="40" height="50" fill="#8ab"/>
+  <text x="10" y="88" font-size="11">Q1  Q2  Q3  Q4</text></svg>
+<p>我们相信，所有用户都一定会立刻爱上它。欢迎大家踊跃转发，敬请期待！</p>`;
+  renderContent(); toast(t('tSampleLoaded')); };
+
+/* ---------- 语言初始化：PRELOAD > 本地偏好 > 默认英文 ---------- */
+$('#langBtn').onclick = ()=> setLang(LANG==='en' ? 'zh' : 'en');
+(function initLang(){
+  // 优先级：用户手动选过的 > skill 注入 > 浏览器语言 > 英文
+  let saved=null; try{ saved = localStorage.getItem('smart-annotator:lang'); }catch(e){}
+  const fromBrowser = ()=>{
+    const list = (navigator.languages && navigator.languages.length)
+      ? navigator.languages : [navigator.language || ''];
+    return list.some(x=>/^zh\b|-Han|^zh-/i.test(x||'')) ? 'zh' : 'en';
+  };
+  const l = saved || (PRELOAD && PRELOAD.lang) || fromBrowser();
+  LANG = (l==='zh' || l==='en') ? l : 'en';
+  applyI18n();
+})();
+
+// 预加载：skill 调用时内容已内嵌，打开即自动渲染，无需粘贴
+// 支持单篇（source）与多篇（docs:[{name,format,source,originalFile}]）
+if(PRELOAD && (PRELOAD.source || (Array.isArray(PRELOAD.docs) && PRELOAD.docs.length))){
+  const items = Array.isArray(PRELOAD.docs) && PRELOAD.docs.length
+    ? PRELOAD.docs
+    : [{ name:PRELOAD.title, format:PRELOAD.format, source:PRELOAD.source, originalFile:PRELOAD.originalFile }];
+  items.forEach(it=>{
+    state.docs.push(newDoc(it.name || (it.originalFile&&it.originalFile.name) || t('untitled'),
+      it.format||'html', it.source||'', it.originalFile||null));
+  });
+  adoptDoc(state.docs[0]);
+  renderContent(); renderList(); renderTabs();
+  if(PRELOAD.title) document.title = PRELOAD.title + (LANG==='zh'?' · 批注':' · Annotate');
+}
+
+// 本地保存不可用时（沙箱预览/隐私模式）明确告知，避免用户误以为已保存
+if(!storeOK){ const el=$('#saveHint'); if(el) el.textContent=t('saveUnavailable'); }
+
+// 启动时检查是否有未完成的批注可恢复
+(function initRestore(){
+  const s = loadSaved();
+  if(!s) return;
+  const savedDocs = Array.isArray(s.docs)&&s.docs.length ? s.docs
+    : (Array.isArray(s.annotations)? [{source:s.originalSource, annotations:s.annotations}] : []);
+  const n = savedDocs.reduce((m,d)=>m+((d.annotations||[]).length),0);
+  if(!n) return;
+  // 若是 skill 注入的文稿，仅当内容一致才提示恢复，避免把 A 文档的批注落到 B 文档上
+  if(PRELOAD && PRELOAD.source && !savedDocs.some(d=>(d.source||d.original)===PRELOAD.source)) return;
+  const d = new Date(s.savedAt||Date.now()), p=v=>String(v).padStart(2,'0');
+  const stamp=`${d.getMonth()+1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  $('#restoreMsg').innerHTML = t('restoreMsg', n, stamp) + (s.thumbsDropped ? t('restoreNoThumb') : '');
+  $('#restoreBar').classList.add('show');
+  $('#restoreYes').onclick = ()=>{ $('#restoreBar').classList.remove('show'); applySession(s); };
+  $('#restoreNo').onclick  = ()=>{ $('#restoreBar').classList.remove('show'); clearSaved(); };
+})();
+</script>
+</body>
+</html>

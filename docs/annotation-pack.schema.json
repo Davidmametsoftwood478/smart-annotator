@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/USERNAME/smart-annotator/blob/main/docs/annotation-pack.schema.json",
+  "title": "Smart Annotator — annotation pack",
+  "description": "Exported by the 'JSON' button. Open format: original content, every annotation with its anchor, and region screenshots. Consume it with your own pipeline instead of Claude if you prefer.",
+  "type": "object",
+  "required": ["version", "docs"],
+  "properties": {
+    "version": { "type": "integer", "const": 4, "description": "Pack format version. v3 packs carry a single document at the top level instead of docs[]; readers should accept both." },
+    "lang": { "enum": ["en", "zh"], "description": "UI language the pack was exported in." },
+    "exportedAt": { "type": "string", "format": "date-time" },
+    "prompt": { "type": "string", "description": "The ready-to-send brief the tool generated. Convenience only — everything needed to rebuild it is in docs[]." },
+    "docs": {
+      "type": "array",
+      "description": "One entry per annotated document.",
+      "items": {
+        "type": "object",
+        "required": ["name", "format", "original", "annotations"],
+        "properties": {
+          "name": { "type": "string" },
+          "format": { "enum": ["html", "markdown", "csv", "text"], "description": "Format of the annotatable VIEW (not necessarily of originalFile)." },
+          "mode": { "enum": ["static", "interactive"] },
+          "original": { "type": "string", "description": "Source of the view. May be omitted/empty when 'send notes only' was used for a large source." },
+          "originalFile": {
+            "type": "object",
+            "description": "Present when the view was converted from a binary file. Revisions should be written back to THIS file, preserving its format.",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string", "examples": ["report.docx", "q3.xlsx", "deck.pptx"] },
+              "note": { "type": "string" }
+            }
+          },
+          "uiShot": { "type": "boolean", "description": "true = the document is a screenshot of a UI; apply the notes to the source code that produces it, not to the image." },
+          "annotations": { "type": "array", "items": { "$ref": "#/$defs/annotation" } }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "annotation": {
+      "type": "object",
+      "required": ["id", "kind", "quote", "comment"],
+      "properties": {
+        "id": { "type": "integer" },
+        "kind": { "enum": ["selection", "block", "region"], "description": "selection = highlighted text; block = whole paragraph/cell; region = dragged box over a visual area." },
+        "quote": { "type": "string", "description": "The annotated text. For 'region' this is a placeholder summary; use snippetHTML instead." },
+        "comment": { "type": "string", "description": "What the human wants changed. May be empty." },
+        "blockLabel": { "type": "string", "description": "Human-readable location, mirrors anchor.ref.", "examples": ["p#4", "Sheet1!B3", "'Q3 Sales'!B2:D5", "第2页"] },
+        "anchor": {
+          "type": "object",
+          "description": "Machine-readable location. Prefer this over text matching when present.",
+          "required": ["type", "ref"],
+          "properties": {
+            "type": { "enum": ["cell", "page", "block"] },
+            "ref": { "type": "string", "description": "cell: A1-style address, optionally sheet-qualified and possibly a range. page: page label. block: tag#index." }
+          }
+        },
+        "rect": {
+          "type": "object",
+          "description": "region only — box geometry relative to the rendered view.",
+          "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "w": { "type": "number" }, "h": { "type": "number" } }
+        },
+        "snippetHTML": { "type": "string", "description": "region only — the underlying HTML the box covered. This is what lets a model edit the right markup." },
+        "thumb": { "type": "string", "description": "region only — PNG data URL of the boxed area. Feed to a multimodal model so it can SEE the visual." }
+      }
+    }
+  }
+}

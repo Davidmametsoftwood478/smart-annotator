@@ -1,0 +1,7 @@
+# Only needed for converting binary documents (docx / xlsx / pdf / pptx).
+# Markdown, HTML, CSV, plain text and images work with no Python at all.
+mammoth>=1.6        # .docx  -> HTML
+openpyxl>=3.1       # .xlsx  -> table view with real cell anchors
+pymupdf>=1.24       # .pdf   -> one image per page
+python-pptx>=0.6    # .pptx  -> text fallback when LibreOffice is unavailable
+# .pptx page rendering also needs LibreOffice (`soffice`) on PATH.
